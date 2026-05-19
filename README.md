@@ -1,8 +1,8 @@
 # PPFELDAV2 public
 
-Verejna verze palubniho pocitace pro Skoda Felicia 1.3 MPI.
+Veřejna verze palubního počítace pro škoda Felicia 1.3 MPI.
 
-Zdrojovy kod je ve slozce `V2.0/`. Projekt je pripraveny pro PlatformIO.
+Zdrojový kod je ve složce `V2.0/`. Projekt je připravený pro PlatformIO.
 
 ## Build
 
