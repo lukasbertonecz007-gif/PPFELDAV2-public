@@ -27,6 +27,9 @@
 #endif
 #endif
 
+constexpr const char* FW_NAME    = "PPFELDA V2";
+constexpr const char* FW_VERSION = "V1.2E";
+
 // ===== KONFIGURACE RPM =====
 #ifndef RPM_MODE_FREQ
 #define RPM_MODE_FREQ 1   // 1 = čítání hran (ISR), 0 = pulseIn (blokující fallback)
@@ -82,7 +85,7 @@ constexpr float PALIVO_OFFSET_MAX_L                  = 10.0f;
 
 //Lehká kalibrace na skutečnou spotřebu – mění se s časem, teplotou, kvalitou paliva atd. – umožňuje nastavit skutečnou spotřebu
 //----------------------------------------------------------------------------------------------------
-constexpr float    VSTRIK_CC_ZA_MIN                  = 151.0f; // Felicia 1.3 AMH vstřikovač 047 906 031 ~125 cc/min @ 2.5–3.0 bar (EV1 hi-Z 18.5Ω) (původně 125c)
+constexpr float    VSTRIK_CC_ZA_MIN                  = 155.0f; // Felicia 1.3 AMH vstřikovač 047 906 031 ~125 cc/min @ 2.5–3.0 bar (EV1 hi-Z 18.5Ω) (původně 125c)
 constexpr uint32_t VSTRIK_FILTR_US                   = 500;   // filtr pro měření otevření vstřiku – 1000µs = 1ms (na test 500)
 constexpr int      MOTOR_POCET_VSTRIKU_DEFAULT       = 4;
 constexpr int      MERENY_POCET_VSTRIKU_DEFAULT      = 1;
@@ -93,7 +96,11 @@ constexpr unsigned long PALIVO_VZORKOVANI_MS         = 750;  // 750ms = ~5 pulz�
 constexpr float         RYCHLOST_BLEND_KMH           = 12.0f;
 constexpr unsigned long RYCHLOST_OKNO_MS             = 250;
 constexpr unsigned long RYCHLOST_OKNO_MAX_MS         = 450;
+constexpr float         RYCHLOST_NIZKA_KMH           = 30.0f;
+constexpr unsigned long RYCHLOST_OKNO_NIZKA_MS       = 750;
+constexpr unsigned long RYCHLOST_OKNO_NIZKA_MAX_MS   = 1100;
 constexpr uint8_t       RYCHLOST_PERIODA_N           = 5;
+constexpr unsigned long RYCHLOST_LOG_VYPADEK_MS      = 2500;
 
 // ===== KONSTANTY – DISPLEJ/IKONY =====
 constexpr uint8_t VODA_W     = 15;
@@ -110,6 +117,26 @@ constexpr uint8_t SPOTREBA_W = 15;
 constexpr uint8_t SPOTREBA_H = 13;
 constexpr uint8_t NACTENI_W  = 106;
 constexpr uint8_t NACTENI_H  = 41;
+
+constexpr uint8_t OLED_JAS_MAX_REZIM   = 0;
+constexpr uint8_t OLED_JAS_STRED_REZIM = 1;
+constexpr uint8_t OLED_JAS_NOC_REZIM   = 2;
+constexpr uint8_t OLED_JAS_AUTO_REZIM  = 3;
+constexpr uint8_t OLED_JAS_REZIM_DEFAULT = OLED_JAS_MAX_REZIM;
+constexpr uint8_t OLED_KONTRAST_MAX    = 255;
+constexpr uint8_t OLED_KONTRAST_STRED  = 110;
+constexpr uint8_t OLED_KONTRAST_NOC    = 28;
+constexpr uint8_t OLED_AUTO_NOC_OD_H   = 20;
+constexpr uint8_t OLED_AUTO_NOC_DO_H   = 6;
+
+constexpr uint8_t ANIMACE_VYP_REZIM    = 0;
+constexpr uint8_t ANIMACE_RYCHLA_REZIM = 1;
+constexpr uint8_t ANIMACE_NORMAL_REZIM = 2;
+constexpr uint8_t ANIMACE_POMALA_REZIM = 3;
+constexpr uint8_t ANIMACE_REZIM_DEFAULT = ANIMACE_NORMAL_REZIM;
+constexpr unsigned long ANIMACE_RYCHLA_MS = 180UL;
+constexpr unsigned long ANIMACE_NORMAL_MS = 260UL;
+constexpr unsigned long ANIMACE_POMALA_MS = 380UL;
 
 // ===== KONSTANTY – ADC/NAPÁJENÍ =====
 constexpr float ADC_MAX                = 4095.0f;
@@ -128,6 +155,12 @@ constexpr unsigned long TLACITKO_DRZI_ANTIZKMIT   = 50;    // ms pro eliminaci z
 constexpr float         NIZKE_PALIVO_ZAP_L        = 5.0f;  // Pod tuto hladinu se zapne upozornění na nízké palivo (s hysterezí, vypne se až nad 5.8L)
 constexpr float         NIZKE_PALIVO_VYP_L        = 5.8f;  // Nad tuto hladinu se vypne upozornění na nízké palivo (s hysterezí, zapne se až pod 5.0L)
 constexpr float         NAPETI_NIZKE_V            = 11.5f;  // varování nízké baterie [V]
+constexpr float         NAPETI_LOG_NIZKE_V        = 11.0f;
+constexpr float         NAPETI_LOG_OBNOVENO_V     = 11.8f;
+constexpr unsigned long NAPETI_LOG_ZPOZDENI_MS    = 3000UL;
+constexpr unsigned long NAPETI_LOG_OBNOVA_MS      = 3000UL;
+constexpr unsigned long CIDLO_LOG_ZPOZDENI_MS     = 5000UL;
+constexpr unsigned long CIDLO_LOG_OBNOVA_MS       = 3000UL;
 
 // ===== KONSTANTY – BOOT =====
 constexpr unsigned long SPUSTENI_MIN_MS             = 800;
@@ -148,7 +181,7 @@ constexpr float         OTACKY_ALFA                     = 0.35f;
 constexpr float         HRANY_NA_OTACKU                 = 4.0f;
 constexpr uint8_t       ADS_CHYBA_LIMIT                 = 5;
 constexpr unsigned long I2C_OBNOVA_MIN_INTERVAL_MS      = 30000UL;
-constexpr uint32_t      RYCHLOST_FILTR_US               = 600;
+constexpr uint32_t      RYCHLOST_FILTR_US               = 1500;
 constexpr float         MAX_KMH_FYZICKY                 = 220.0f;
 constexpr float         RYCHLOST_REZERVA                = 1.4f;
 constexpr float         PULZY_NA_KM_DEFAULT             = 7840.0f;   // výchozí hodnota (Felicia 1.3 AMH s 185/60 R14, 2x snímač)
@@ -280,6 +313,8 @@ extern float betaVenku;
 extern bool  teplotaVenkuInicializovana;
 extern float palivoOffsetL;
 extern float napetiOffsetV;
+extern uint8_t oledJasRezim;
+extern uint8_t animaceRezim;
 
 extern CidloDiag vodaDiag;
 extern CidloDiag palivoDiag;
@@ -287,6 +322,7 @@ extern CidloDiag palivoDiag;
 extern uint32_t      diagRychlostPulzy;
 extern unsigned long diagRychlostOknoMs;
 extern uint32_t      diagRychlostMedianUs;
+extern uint32_t      diagRychlostStariMs;
 extern float         diagRychlostPocetKmh;
 extern float         diagRychlostPeriodaKmh;
 extern bool          diagRychlostAktualni;
@@ -314,6 +350,8 @@ extern SPIClass spiSD;
 
 extern uint64_t      celkoveMetry_u64;
 extern uint64_t      celkovePalivoUl_u64;
+extern uint64_t      tripMetry_u64;
+extern uint64_t      tripPalivoUl_u64;
 extern uint64_t      denniMetry_u64;
 extern uint32_t      casMotoru_s_u32;
 extern uint64_t      posledniUlozeneMetry_u64;
@@ -330,9 +368,12 @@ extern float rychlostVozu;
 extern float otackyMotoru;
 extern float spotrebaLh;
 extern float prumernaSpotreba;
+extern float tripPrumernaSpotreba;
 extern float hladinaPaliva;
 extern float celkovePalivo;
 extern float celkovaVzdalenost;
+extern float tripPalivo;
+extern float tripVzdalenost;
 extern float denniVzdalenost;
 extern float odhadovanyDojezd;
 
@@ -377,6 +418,7 @@ bool vynulujStatistiky(bool ulozitNaSd = true);
 bool ulozStatistikySD();
 bool ulozKonfiguraciSdNyni();
 void zapisErrorLog(const char* uroven, const char* kod, const char* detail = nullptr);
+void zalogujStartSystemu();
 void obsluzSystemovyLog();
 
 // commands.cpp
@@ -390,6 +432,11 @@ float ctejOdporCidlaAds(int channel, float* rOut = nullptr, float* vOut = nullpt
 void vykresliStartovniObrazovku(float progress, const char* stavText);
 void vykresliDisplej();
 bool potrebujePrekreslitUI();
+void prepniStrankuSAnimaci(int smer);
+void zrusAnimaciStranky();
+bool animaceStrankyAktivni();
+unsigned long dobaAnimaceStrankyMs();
+void aktualizujJasDispleje(bool vynutit = false);
 
 // inputs.cpp
 void obsluzVstupy();

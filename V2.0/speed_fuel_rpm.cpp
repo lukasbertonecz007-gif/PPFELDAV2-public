@@ -37,7 +37,10 @@ void vypocetPalivoRychlost() {
 
   unsigned long speedWindowMs = nowMs - rychlostOknoZacatek;
   uint32_t dWindowPulses = sc - rychlostOknoZakladPocet;
-  if ((dWindowPulses > 0 && speedWindowMs >= RYCHLOST_OKNO_MS) || speedWindowMs >= RYCHLOST_OKNO_MAX_MS) {
+  bool rezimNizkaRychlost = rychlostVozu < RYCHLOST_NIZKA_KMH;
+  unsigned long minOknoMs = rezimNizkaRychlost ? RYCHLOST_OKNO_NIZKA_MS : RYCHLOST_OKNO_MS;
+  unsigned long maxOknoMs = rezimNizkaRychlost ? RYCHLOST_OKNO_NIZKA_MAX_MS : RYCHLOST_OKNO_MAX_MS;
+  if ((dWindowPulses > 0 && speedWindowMs >= minOknoMs) || speedWindowMs >= maxOknoMs) {
     diagRychlostPulzy = dWindowPulses;
     diagRychlostOknoMs = speedWindowMs;
     if (speedWindowMs > 0) {
@@ -50,7 +53,9 @@ void vypocetPalivoRychlost() {
     rychlostOknoZakladPocet = sc;
   }
 
-  bool speedFresh = (lastPulseUsCopy != 0) && ((nowUs - lastPulseUsCopy) <= (RYCHLOST_VYPADEK_MS * 1000UL));
+  uint32_t speedAgeUs = (lastPulseUsCopy != 0) ? (nowUs - lastPulseUsCopy) : 0xFFFFFFFFUL;
+  diagRychlostStariMs = (speedAgeUs == 0xFFFFFFFFUL) ? 0xFFFFFFFFUL : (speedAgeUs / 1000UL);
+  bool speedFresh = (lastPulseUsCopy != 0) && (speedAgeUs <= (RYCHLOST_VYPADEK_MS * 1000UL));
   diagRychlostAktualni = speedFresh;
 
   uint32_t medPeriodUs = speedFresh ? medianPeriodaUs(periodBufCopy, periodCountCopy) : 0;
@@ -84,13 +89,14 @@ void vypocetPalivoRychlost() {
 
   float dtS = (rychlostPosledniVypocet == 0) ? 0.10f : ((float)(nowMs - rychlostPosledniVypocet) / 1000.0f);
   rychlostPosledniVypocet = nowMs;
-  float maxRise = 90.0f * dtS + 2.0f;
-  float maxFall = 130.0f * dtS + 3.0f;
+  bool filtrujNizkouRychlost = (rychlostVozu < RYCHLOST_NIZKA_KMH) || (targetSpeed < RYCHLOST_NIZKA_KMH);
+  float maxRise = filtrujNizkouRychlost ? (25.0f * dtS + 0.8f) : (90.0f * dtS + 2.0f);
+  float maxFall = filtrujNizkouRychlost ? (45.0f * dtS + 1.5f) : (130.0f * dtS + 3.0f);
   if (targetSpeed > rychlostVozu + maxRise) targetSpeed = rychlostVozu + maxRise;
   if (targetSpeed < rychlostVozu - maxFall) targetSpeed = rychlostVozu - maxFall;
   if (targetSpeed < 0.0f) targetSpeed = 0.0f;
 
-  float alphaSpdFiltered = (!speedFresh || targetSpeed < 1.0f) ? 0.30f : ((targetSpeed < RYCHLOST_BLEND_KMH) ? 0.14f : 0.18f);
+  float alphaSpdFiltered = !speedFresh ? 0.75f : ((targetSpeed < 1.0f) ? 0.30f : ((targetSpeed < RYCHLOST_NIZKA_KMH) ? 0.10f : 0.18f));
   rychlostVozu = alphaSpdFiltered * targetSpeed + (1.0f - alphaSpdFiltered) * rychlostVozu;
   if (rychlostVozu < 0.1f) rychlostVozu = 0.0f;
 
@@ -105,9 +111,11 @@ void vypocetPalivoRychlost() {
   metruNevyreseno -= (float)add_m;
 
   celkoveMetry_u64 += add_m;
+  tripMetry_u64 += add_m;
   denniMetry_u64 += add_m;
 
   celkovaVzdalenost = (float)(celkoveMetry_u64 / 1000.0);
+  tripVzdalenost = (float)(tripMetry_u64 / 1000.0);
   denniVzdalenost = (float)(denniMetry_u64 / 1000.0);
 
   // ====== PALIVO – výpočet spotřeby z času otevření vstřiku ======
@@ -196,7 +204,9 @@ void vypocetPalivoRychlost() {
     uint64_t addFuelUl = (uint64_t)palivoUlNevyreseno;
     palivoUlNevyreseno -= (double)addFuelUl;
     celkovePalivoUl_u64 += addFuelUl;
+    tripPalivoUl_u64 += addFuelUl;
     celkovePalivo = (float)(celkovePalivoUl_u64 / 1000000.0);
+    tripPalivo = (float)(tripPalivoUl_u64 / 1000000.0);
 
     // uzavřít okno a začít nové
     palivoOknoUs = 0;
@@ -206,13 +216,20 @@ void vypocetPalivoRychlost() {
 
   // průměrná spotřeba L/100km
   celkovaVzdalenost = (float)(celkoveMetry_u64 / 1000.0);
+  tripVzdalenost = (float)(tripMetry_u64 / 1000.0);
   denniVzdalenost = (float)(denniMetry_u64 / 1000.0);
   celkovePalivo = (float)(celkovePalivoUl_u64 / 1000000.0);
+  tripPalivo = (float)(tripPalivoUl_u64 / 1000000.0);
 
   if (celkoveMetry_u64 > 0) {
     prumernaSpotreba = (float)((double)celkovePalivoUl_u64 / (10.0 * (double)celkoveMetry_u64));
   } else {
     prumernaSpotreba = 0.0f;
+  }
+  if (tripMetry_u64 > 0) {
+    tripPrumernaSpotreba = (float)((double)tripPalivoUl_u64 / (10.0 * (double)tripMetry_u64));
+  } else {
+    tripPrumernaSpotreba = 0.0f;
   }
 
   // dojezd přepočítávej pomaleji, aby nelítal s každým vzorkem hladiny paliva

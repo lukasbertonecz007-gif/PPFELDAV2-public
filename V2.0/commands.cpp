@@ -7,7 +7,7 @@ void zpracujPrikaz(char* buffer, Stream& stream) {
   // --- nuluj: reset statistik ---
   if (jePresnyPrikaz(buffer, "nuluj")) {
     bool ok = vynulujStatistiky(true);
-    stream.println(ok ? "Statistiky vynulovany a ulozeny." : "Statistiky vynulovany jen v RAM, SD ulozeni selhalo.");
+    stream.println(ok ? "Trip/denni statistiky vynulovany a ulozeny." : "Trip/denni statistiky vynulovany jen v RAM, SD ulozeni selhalo.");
   }
 
   // --- tvoda / tvoda.off: test alarmu přehřátí ---
@@ -51,6 +51,7 @@ void zpracujPrikaz(char* buffer, Stream& stream) {
   else if (jePresnyPrikaz(buffer, "palivo.alarm.off")) {
     upozorneniNizkePalivoPovoleno = false;
     upozorneniNizkePalivo = false;
+    zrusAnimaciStranky();
     stranka = (predchoziStranka >= 1 && predchoziStranka <= 5) ? predchoziStranka : 1;
     oznacKonfiguraciJakoZmenenou();
     stream.println("Alarm nizkeho paliva: VYP");
@@ -79,9 +80,9 @@ void zpracujPrikaz(char* buffer, Stream& stream) {
                   vodaDiag.raw, vodaDiag.volts, vodaDiag.ohms, vodaDiag.valid ? "ANO" : "NE", tW, teplotaVody);
     stream.printf("PALIVO: raw=%6d  Vpin=%.3f V  R=%.1f ohm  valid=%s  Lcalc=%.1f L  OLED=%.1f L\n",
                   palivoDiag.raw, palivoDiag.volts, palivoDiag.ohms, palivoDiag.valid ? "ANO" : "NE", lF, hladinaPaliva);
-    stream.printf("RYCHL.: pulzy=%lu  okno=%lu ms  medPeriod=%lu us  count=%.1f km/h  period=%.1f km/h  OLED=%.1f km/h  fresh=%s\n",
+    stream.printf("RYCHL.: pulzy=%lu  okno=%lu ms  medPeriod=%lu us  age=%lu ms  count=%.1f km/h  period=%.1f km/h  OLED=%.1f km/h  fresh=%s\n",
                   (unsigned long)diagRychlostPulzy, diagRychlostOknoMs, (unsigned long)diagRychlostMedianUs,
-                  diagRychlostPocetKmh, diagRychlostPeriodaKmh, rychlostVozu, diagRychlostAktualni ? "ANO" : "NE");
+                  (unsigned long)diagRychlostStariMs, diagRychlostPocetKmh, diagRychlostPeriodaKmh, rychlostVozu, diagRychlostAktualni ? "ANO" : "NE");
     stream.printf("KVALT : odhad=%d  pomer=%.1f RPM/km/h\n",
                   odhadnutyStupen, (rychlostVozu >= 1.0f) ? (otackyMotoru / rychlostVozu) : 0.0f);
     stream.printf("VSTRIK: pulzy=%lu  open=%lu us  raw=%.2f L/h  filt=%.2f L/h  mapa=%d/%d  flow=%.1f cc/min\n",
@@ -173,15 +174,18 @@ void zpracujPrikaz(char* buffer, Stream& stream) {
   // --- stav ---
   else if (jePresnyPrikaz(buffer, "stav")) {
     stream.println("--- Stav ---");
+    stream.printf("Firmware        : %s %s\n", FW_NAME, FW_VERSION);
     stream.printf("Teplota vody    : %.1f C\n", teplotaVody);
     stream.printf("Baterie         : %.2f V\n", napetiBaterie);
     stream.printf("Rychlost        : %.1f km/h\n", rychlostVozu);
     stream.printf("Otacky          : %.0f RPM\n", otackyMotoru);
     stream.printf("Spotreba        : %.2f L/h\n", spotrebaLh);
-    stream.printf("Prumer          : %.2f L/100km\n", prumernaSpotreba);
+    stream.printf("Prumer lifetime : %.2f L/100km\n", prumernaSpotreba);
+    stream.printf("Prumer trip     : %.2f L/100km\n", tripPrumernaSpotreba);
     stream.printf("Palivo          : %.1f L\n", hladinaPaliva);
     stream.printf("Dojezd          : %.0f km\n", odhadovanyDojezd);
-    stream.printf("Vzdalenost      : %.1f km  (denni: %.1f km)\n", celkovaVzdalenost, denniVzdalenost);
+    stream.printf("Vzdalenost life : %.1f km  %.1f L\n", celkovaVzdalenost, celkovePalivo);
+    stream.printf("Vzdalenost trip : %.1f km  %.1f L  denni %.1f km\n", tripVzdalenost, tripPalivo, denniVzdalenost);
     stream.printf("Alarmy          : %s\n", alarmyPovoleny ? "ZAP" : "VYP");
     stream.printf("Alarm paliva    : %s\n", upozorneniNizkePalivoPovoleno ? "ZAP" : "VYP");
     stream.printf("ADS             : %s\n", adsPripraven ? "OK" : "CHYBA");
@@ -199,7 +203,7 @@ void zpracujPrikaz(char* buffer, Stream& stream) {
     stream.println("stav                - aktualni hodnoty");
     stream.println("d                   - diagnostika ADS1115");
     stream.println("diag                - kompaktni diagnostika (BT)");
-    stream.println("nuluj               - vynulovat statistiky");
+    stream.println("nuluj               - vynulovat trip/denni statistiky");
     stream.println("cas HH:MM:SS        - nastavit cas RTC");
     stream.println("alarm.on/off        - alarmy prehrati vody");
     stream.println("palivo.alarm.on/off - alarm nizkeho paliva");

@@ -55,8 +55,7 @@ void obsluzVstupy() {
           servisMenuNext();
         }
       } else {
-        stranka = (stranka % 5) + 1;   // doprava: 1→2→3→4→5→1
-        uiPrekreslit = true;
+        prepniStrankuSAnimaci(1);       // doprava: 1→2→3→4→5→1
         oznacKonfiguraciJakoZmenenou();
       }
     }
@@ -102,8 +101,7 @@ void obsluzVstupy() {
           servisMenuPrev();
         }
       } else {
-        stranka = (stranka > 1) ? stranka - 1 : 5;   // doleva: 5→4→3→2→1→5
-        uiPrekreslit = true;
+        prepniStrankuSAnimaci(-1);      // doleva: 5→4→3→2→1→5
         oznacKonfiguraciJakoZmenenou();
       }
     }
@@ -125,6 +123,7 @@ void obsluzVstupy() {
   } else if (upozorneniNizkePalivoPovoleno && !upozorneniNizkePalivo && hladinaPaliva <= NIZKE_PALIVO_ZAP_L) {
     upozorneniNizkePalivo = true;
     predchoziStranka = stranka;
+    zrusAnimaciStranky();
     stranka = 3;
     nizkePalivoZobrazeni = currentTime;
   } else if (upozorneniNizkePalivo && hladinaPaliva >= NIZKE_PALIVO_VYP_L) {
@@ -132,7 +131,10 @@ void obsluzVstupy() {
   }
 
   if (upozorneniNizkePalivo && (currentTime - nizkePalivoZobrazeni) >= NIZKE_PALIVO_UPOZORNENI_MS) {
-    if (stranka == 3) stranka = (predchoziStranka >= 1 && predchoziStranka <= 5) ? predchoziStranka : 1;
+    if (stranka == 3) {
+      zrusAnimaciStranky();
+      stranka = (predchoziStranka >= 1 && predchoziStranka <= 5) ? predchoziStranka : 1;
+    }
     nizkePalivoZobrazeni = currentTime;  // předejít opakovanému přepínání stránky
   }
 

@@ -10,6 +10,179 @@ static uint16_t blinkOffMs = 120;
 static uint16_t blinkOnMs  = 120;
 static unsigned long blinkNextMs = 0;
 
+// Animace pouze informační části pod hodinami. Pravých 26 px patří ukazateli kvaltu.
+constexpr int INFO_ANIM_X = 0;
+constexpr int INFO_ANIM_Y = 30;
+constexpr int INFO_ANIM_W = 102;
+constexpr int INFO_ANIM_H = 34;
+constexpr int INFO_ANIM_TILE_ROWS = (INFO_ANIM_H + 7) / 8;
+constexpr int INFO_ANIM_BYTES = INFO_ANIM_W * INFO_ANIM_TILE_ROWS;
+
+static uint8_t infoAnimStary[INFO_ANIM_BYTES];
+static uint8_t infoAnimNovy[INFO_ANIM_BYTES];
+static bool infoAnimAktivni = false;
+static bool infoAnimNovyPripraven = false;
+static bool infoObrazovkaPripravena = false;
+static int8_t infoAnimSmer = 1;
+static unsigned long infoAnimStartMs = 0;
+
+unsigned long dobaAnimaceStrankyMs() {
+  switch (animaceRezim) {
+    case ANIMACE_VYP_REZIM: return 0;
+    case ANIMACE_RYCHLA_REZIM: return ANIMACE_RYCHLA_MS;
+    case ANIMACE_POMALA_REZIM: return ANIMACE_POMALA_MS;
+    case ANIMACE_NORMAL_REZIM:
+    default:
+      return ANIMACE_NORMAL_MS;
+  }
+}
+
+void aktualizujJasDispleje(bool vynutit) {
+  static uint8_t posledniKontrast = 0;
+  static bool kontrastNastaven = false;
+  static unsigned long posledniKontrolaMs = 0;
+  unsigned long now = millis();
+  if (!vynutit && (now - posledniKontrolaMs) < 30000UL) return;
+  posledniKontrolaMs = now;
+
+  uint8_t kontrast = OLED_KONTRAST_MAX;
+  if (oledJasRezim == OLED_JAS_STRED_REZIM) {
+    kontrast = OLED_KONTRAST_STRED;
+  } else if (oledJasRezim == OLED_JAS_NOC_REZIM) {
+    kontrast = OLED_KONTRAST_NOC;
+  } else if (oledJasRezim == OLED_JAS_AUTO_REZIM && Rtc.IsDateTimeValid()) {
+    RtcDateTime dt = Rtc.GetDateTime();
+    if (dt.Year() >= 2020 && dt.Year() <= 2099) {
+      uint8_t hodina = dt.Hour();
+      bool noc = hodina >= OLED_AUTO_NOC_OD_H || hodina < OLED_AUTO_NOC_DO_H;
+      kontrast = noc ? OLED_KONTRAST_NOC : OLED_KONTRAST_MAX;
+    }
+  }
+
+  if (vynutit || !kontrastNastaven || kontrast != posledniKontrast) {
+    u8g2.setContrast(kontrast);
+    posledniKontrast = kontrast;
+    kontrastNastaven = true;
+  }
+}
+
+static bool zachytInfoOblast(uint8_t* cil) {
+  uint8_t* framebuffer = u8g2.getBufferPtr();
+  if (!framebuffer || !cil) return false;
+
+  memset(cil, 0, INFO_ANIM_BYTES);
+  int displayW = u8g2.getDisplayWidth();
+  for (int y = 0; y < INFO_ANIM_H; ++y) {
+    int globalY = INFO_ANIM_Y + y;
+    uint8_t maska = (uint8_t)(1U << (globalY & 7));
+    int radek = (globalY >> 3) * displayW;
+    int cilRadek = (y >> 3) * INFO_ANIM_W;
+    uint8_t cilMaska = (uint8_t)(1U << (y & 7));
+    for (int x = 0; x < INFO_ANIM_W; ++x) {
+      if (framebuffer[radek + INFO_ANIM_X + x] & maska) {
+        cil[cilRadek + x] |= cilMaska;
+      }
+    }
+  }
+  return true;
+}
+
+static void vykresliInfoSnimek(const uint8_t* snimek, int xOffset) {
+  if (!snimek) return;
+
+  for (int y = 0; y < INFO_ANIM_H; ++y) {
+    int radek = (y >> 3) * INFO_ANIM_W;
+    uint8_t maska = (uint8_t)(1U << (y & 7));
+    for (int x = 0; x < INFO_ANIM_W; ++x) {
+      int cilX = INFO_ANIM_X + x + xOffset;
+      if (cilX < INFO_ANIM_X || cilX >= INFO_ANIM_X + INFO_ANIM_W) continue;
+      if (snimek[radek + x] & maska) {
+        u8g2.drawPixel(cilX, INFO_ANIM_Y + y);
+      }
+    }
+  }
+}
+
+static void aplikujAnimaciInfo() {
+  if (!infoAnimAktivni) return;
+
+  if (!infoAnimNovyPripraven) {
+    if (!zachytInfoOblast(infoAnimNovy)) {
+      infoAnimAktivni = false;
+      return;
+    }
+    infoAnimNovyPripraven = true;
+  }
+
+  unsigned long delkaAnimace = dobaAnimaceStrankyMs();
+  if (delkaAnimace == 0) {
+    infoAnimAktivni = false;
+    infoAnimNovyPripraven = false;
+    return;
+  }
+
+  unsigned long uplynulo = millis() - infoAnimStartMs;
+  float prubeh = (uplynulo >= delkaAnimace) ? 1.0f : ((float)uplynulo / (float)delkaAnimace);
+  float zbytek = 1.0f - prubeh;
+  float zpomalenyPrubeh = 1.0f - zbytek * zbytek * zbytek;
+  int posun = (int)lroundf(zpomalenyPrubeh * (float)INFO_ANIM_W);
+
+  u8g2.setDrawColor(0);
+  u8g2.drawBox(INFO_ANIM_X, INFO_ANIM_Y, INFO_ANIM_W, INFO_ANIM_H);
+  u8g2.setDrawColor(1);
+
+  if (infoAnimSmer > 0) {
+    vykresliInfoSnimek(infoAnimStary, -posun);
+    vykresliInfoSnimek(infoAnimNovy, INFO_ANIM_W - posun);
+  } else {
+    vykresliInfoSnimek(infoAnimStary, posun);
+    vykresliInfoSnimek(infoAnimNovy, -INFO_ANIM_W + posun);
+  }
+
+  if (prubeh >= 1.0f) {
+    infoAnimAktivni = false;
+    infoAnimNovyPripraven = false;
+  }
+}
+
+void zrusAnimaciStranky() {
+  infoAnimAktivni = false;
+  infoAnimNovyPripraven = false;
+  infoObrazovkaPripravena = false;
+}
+
+bool animaceStrankyAktivni() {
+  return infoAnimAktivni;
+}
+
+void prepniStrankuSAnimaci(int smer) {
+  if (smer == 0) return;
+
+  int novaStranka = stranka + ((smer > 0) ? 1 : -1);
+  if (novaStranka > 5) novaStranka = 1;
+  if (novaStranka < 1) novaStranka = 5;
+
+  bool alarmTriggered = alarmyPovoleny && !isnan(teplotaVody) && teplotaVody > 90.0f;
+  bool animovat = infoObrazovkaPripravena &&
+                  dobaAnimaceStrankyMs() > 0 &&
+                  !servisMenuAktivni && !smZpravaAktivni &&
+                  !dvereOtevrene && !alarmTriggered;
+
+  if (!animovat || !zachytInfoOblast(infoAnimStary)) {
+    zrusAnimaciStranky();
+    stranka = novaStranka;
+    uiPrekreslit = true;
+    return;
+  }
+
+  infoAnimSmer = (smer > 0) ? 1 : -1;
+  infoAnimStartMs = millis();
+  infoAnimNovyPripraven = false;
+  infoAnimAktivni = true;
+  stranka = novaStranka;
+  uiPrekreslit = true;
+}
+
 void blikniDisplej(uint8_t times, uint16_t off_ms, uint16_t on_ms) {
   blinkTimesRemaining = times;
   blinkPhase = 0;
@@ -83,6 +256,7 @@ void vykresliStartovniObrazovku(float progress, const char* stavText) {
 void vykresliDisplej() {
   // --- SERVIS MENU / stavová zpráva – překryje vše ostatní ---
   if (servisMenuAktivni || smZpravaAktivni) {
+    zrusAnimaciStranky();
     vykresliServisMenu();
     displayPosledniAktualizace = millis();
     return;
@@ -90,6 +264,9 @@ void vykresliDisplej() {
 
   bool rtcValid = Rtc.IsDateTimeValid();
   bool alarmTriggered = (alarmyPovoleny && !isnan(teplotaVody) && (teplotaVody > 90.0f));
+  if (dvereOtevrene || alarmTriggered) {
+    zrusAnimaciStranky();
+  }
 
   u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_helvB24_tr);
@@ -240,7 +417,7 @@ void vykresliDisplej() {
             u8g2.drawStr(ix_fuel + PALIVO_W + 4, base1, buf);
           }
 
-          if (denniVzdalenost < 9.95f)
+          if (denniVzdalenost < 999.95f)
             snprintf(buf, sizeof(buf), " %.1f km", denniVzdalenost);
           else
             snprintf(buf, sizeof(buf), " %.0f km", denniVzdalenost);
@@ -313,7 +490,12 @@ void vykresliDisplej() {
       u8g2.drawTriangle(gearCenterX, gearArrowBottomY, gearArrowLeftX, gearArrowLowerBaseY, gearArrowRightX, gearArrowLowerBaseY);  // šipka dolů
   }
 
+  if (!dvereOtevrene && !alarmTriggered) {
+    aplikujAnimaciInfo();
+  }
+
   u8g2.sendBuffer();
+  infoObrazovkaPripravena = !dvereOtevrene && !alarmTriggered;
 
   displayPosledniAktualizace = millis();
 }
@@ -325,6 +507,7 @@ bool potrebujePrekreslitUI() {
 
   bool rtcValid = Rtc.IsDateTimeValid();
   bool dirty = false;
+  if (infoAnimAktivni) dirty = true;
 
   // Overlay stavy – pokud jsou aktivní nebo právě nastaly, vždy kresli
   static bool lastDvere = false;

@@ -101,9 +101,12 @@ float gearRpmNahoru = GEAR_RPM_NAHORU;
 float gearRpmDolu = GEAR_RPM_DOLU;
 float spotrebaLh = 0.0f;           // L/h
 float prumernaSpotreba = 0.0f;     // L/100 km
+float tripPrumernaSpotreba = 0.0f; // L/100 km od posledniho resetu
 float hladinaPaliva = 0.0f;        // L
 float celkovePalivo = 0.0f;        // L
 float celkovaVzdalenost = 0.0f;    // km
+float tripPalivo = 0.0f;           // L od posledniho resetu
+float tripVzdalenost = 0.0f;       // km od posledniho resetu
 float denniVzdalenost = 0.0f;      // km
 float odhadovanyDojezd = 0.0f;     // km
 
@@ -113,6 +116,8 @@ float betaVenku = VENKU_BETA;
 bool teplotaVenkuInicializovana = false;
 float palivoOffsetL = 0.0f;
 float napetiOffsetV = 0.0f;
+uint8_t oledJasRezim = OLED_JAS_REZIM_DEFAULT;
+uint8_t animaceRezim = ANIMACE_REZIM_DEFAULT;
 
 CidloDiag vodaDiag = { 0, NAN, NAN, false };
 CidloDiag palivoDiag = { 0, NAN, NAN, false };
@@ -120,6 +125,7 @@ CidloDiag palivoDiag = { 0, NAN, NAN, false };
 uint32_t diagRychlostPulzy = 0;
 unsigned long diagRychlostOknoMs = 0;
 uint32_t diagRychlostMedianUs = 0;
+uint32_t diagRychlostStariMs = 0;
 float diagRychlostPocetKmh = 0.0f;
 float diagRychlostPeriodaKmh = 0.0f;
 bool diagRychlostAktualni = false;
@@ -152,6 +158,8 @@ SPIClass spiSD(HSPI);
 // integer akumulátory
 uint64_t celkoveMetry_u64 = 0;     // metry
 uint64_t celkovePalivoUl_u64 = 0;  // mikrolitry
+uint64_t tripMetry_u64 = 0;        // metry od posledniho resetu
+uint64_t tripPalivoUl_u64 = 0;     // mikrolitry od posledniho resetu
 uint64_t denniMetry_u64 = 0;       // metry/den
 uint32_t casMotoru_s_u32 = 0;      // rezerva
 
@@ -242,6 +250,7 @@ void setup() {
   if (!rtcPripravena) {
     Serial.println("RTC neni validni, datum/cas nebyl automaticky prepsan.");
   }
+  aktualizujJasDispleje(true);
   bootFaze = 0.90f;
   bootFazeText = rtcPripravena ? "RTC OK" : "RTC chyba";
   vykresliStartovniObrazovku(bootFaze, bootFazeText);
@@ -249,9 +258,19 @@ void setup() {
   startZacatek = millis();
   posledniKlicData = rtcPripravena ? datumKlic(Rtc.GetDateTime()) : -1;
   startovani = true;
+  zalogujStartSystemu();
 
   // WDT – inicializace a přihlášení (10 s timeout, restart při přetečení)
+#if ESP_IDF_VERSION_MAJOR >= 5
+  esp_task_wdt_config_t wdtConfig = {
+    .timeout_ms = 10000,
+    .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
+    .trigger_panic = true
+  };
+  esp_task_wdt_init(&wdtConfig);
+#else
   esp_task_wdt_init(10, true);
+#endif
   esp_task_wdt_add(NULL);
 
   displayPosledniAktualizace = millis();
@@ -312,7 +331,7 @@ void loop() {
   }
 
   unsigned long currentTime = millis();
-  const unsigned long RENDER_INTERVAL = 100;  // ms
+  const unsigned long RENDER_INTERVAL = animaceStrankyAktivni() ? 33UL : 100UL;
 
   if (currentTime - displayPosledniAktualizace >= RENDER_INTERVAL) {
     if (potrebujePrekreslitUI()) {
@@ -323,6 +342,7 @@ void loop() {
   }
 
   obsluzBlikani();
+  aktualizujJasDispleje();
   moznaUlozKonfiguraciSD();
   moznaUlozSD();
   esp_task_wdt_reset();

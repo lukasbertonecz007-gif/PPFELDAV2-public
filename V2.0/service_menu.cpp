@@ -27,6 +27,21 @@ struct SmPolozka {
   uint8_t     typ;    // 0=bool, 1=float, 2=akce
 };
 
+enum SmIndex {
+  SM_ALARM_VODY = 0,
+  SM_ALARM_PALIVO,
+  SM_OFFSET_VENKU,
+  SM_OFFSET_VODY,
+  SM_OFFSET_PALIVO,
+  SM_OFFSET_BATERIE,
+  SM_RPM_NAHORU,
+  SM_RPM_DOLU,
+  SM_PULZY_KM,
+  SM_JAS_OLED,
+  SM_ANIMACE,
+  SM_RESET_STAT
+};
+
 static const SmPolozka smTab[] = {
   { "Alarm vody",  0 },   // 0 – alarmyPovoleny
   { "Al. palivo",  0 },   // 1 – upozorneniNizkePalivoPovoleno
@@ -37,23 +52,35 @@ static const SmPolozka smTab[] = {
   { "RPM nahoru",  1 },   // 6 – gearRpmNahoru          ±100 RPM
   { "RPM dolu",    1 },   // 7 – gearRpmDolu            ±100 RPM
   { "Pulzy/km",    1 },   // 8 – pulzyNaKm              toggle 3920/7840
-  { "Reset stat.", 2 },   // 9 – reset statistik (akce)
+  { "Jas OLED",    1 },
+  { "Animace",     1 },
+  { "Reset stat.", 2 },
 };
 static constexpr int SM_N = (int)(sizeof(smTab) / sizeof(smTab[0]));
 
 // ===== Hodnota jako string =====
 static void smHodnota(int idx, char* buf, size_t sz) {
   switch (idx) {
-    case 0: snprintf(buf, sz, "%s", alarmyPovoleny ? "ZAP" : "VYP"); break;
-    case 1: snprintf(buf, sz, "%s", upozorneniNizkePalivoPovoleno ? "ZAP" : "VYP"); break;
-    case 2: snprintf(buf, sz, "%.1fC", teplotaVenkuOffsetC); break;
-    case 3: snprintf(buf, sz, "%.1fC", teplotaOffsetC); break;
-    case 4: snprintf(buf, sz, "%.1fL", palivoOffsetL); break;
-    case 5: snprintf(buf, sz, "%.1fV", napetiOffsetV); break;
-    case 6: snprintf(buf, sz, "%.0f", gearRpmNahoru); break;
-    case 7: snprintf(buf, sz, "%.0f", gearRpmDolu); break;
-    case 8: snprintf(buf, sz, "%.0f", pulzyNaKm); break;
-    case 9: snprintf(buf, sz, ">>> OK"); break;
+    case SM_ALARM_VODY: snprintf(buf, sz, "%s", alarmyPovoleny ? "ZAP" : "VYP"); break;
+    case SM_ALARM_PALIVO: snprintf(buf, sz, "%s", upozorneniNizkePalivoPovoleno ? "ZAP" : "VYP"); break;
+    case SM_OFFSET_VENKU: snprintf(buf, sz, "%.1fC", teplotaVenkuOffsetC); break;
+    case SM_OFFSET_VODY: snprintf(buf, sz, "%.1fC", teplotaOffsetC); break;
+    case SM_OFFSET_PALIVO: snprintf(buf, sz, "%.1fL", palivoOffsetL); break;
+    case SM_OFFSET_BATERIE: snprintf(buf, sz, "%.1fV", napetiOffsetV); break;
+    case SM_RPM_NAHORU: snprintf(buf, sz, "%.0f", gearRpmNahoru); break;
+    case SM_RPM_DOLU: snprintf(buf, sz, "%.0f", gearRpmDolu); break;
+    case SM_PULZY_KM: snprintf(buf, sz, "%.0f", pulzyNaKm); break;
+    case SM_JAS_OLED: {
+      static const char* hodnoty[] = { "MAX", "STRED", "NOC", "AUTO" };
+      snprintf(buf, sz, "%s", hodnoty[oledJasRezim <= OLED_JAS_AUTO_REZIM ? oledJasRezim : 0]);
+      break;
+    }
+    case SM_ANIMACE: {
+      static const char* hodnoty[] = { "VYP", "RYCH", "NORMAL", "POMAL" };
+      snprintf(buf, sz, "%s", hodnoty[animaceRezim <= ANIMACE_POMALA_REZIM ? animaceRezim : 0]);
+      break;
+    }
+    case SM_RESET_STAT: snprintf(buf, sz, ">>> OK"); break;
     default: buf[0] = '\0'; break;
   }
 }
@@ -93,7 +120,7 @@ void servisMenuVstupEditu() {
   if (!servisMenuAktivni || smEditRezim) return;
   // Akce (typ 2) – reset statistik vyžaduje potvrzení
   if (smTab[servisMenuPolozka].typ == 2) {
-    if (servisMenuPolozka == 9 && !smResetPotvrzeno) {
+    if (servisMenuPolozka == SM_RESET_STAT && !smResetPotvrzeno) {
       smResetPotvrzeno = true;
       uiPrekreslit = true;
       return;
@@ -109,38 +136,45 @@ void servisMenuVstupEditu() {
 // ===== Increment / + (BTN krátký – editační režim) =====
 void servisMenuPlus() {
   switch (servisMenuPolozka) {
-    case 0: alarmyPovoleny = !alarmyPovoleny; break;
-    case 1: upozorneniNizkePalivoPovoleno = !upozorneniNizkePalivoPovoleno; break;
-    case 2:
+    case SM_ALARM_VODY: alarmyPovoleny = !alarmyPovoleny; break;
+    case SM_ALARM_PALIVO: upozorneniNizkePalivoPovoleno = !upozorneniNizkePalivoPovoleno; break;
+    case SM_OFFSET_VENKU:
       teplotaVenkuOffsetC += 0.5f;
       if (teplotaVenkuOffsetC > 10.0f) teplotaVenkuOffsetC = 10.0f;
       break;
-    case 3:
+    case SM_OFFSET_VODY:
       teplotaOffsetC += 0.5f;
       if (teplotaOffsetC > 10.0f) teplotaOffsetC = 10.0f;
       break;
-    case 4:
+    case SM_OFFSET_PALIVO:
       palivoOffsetL += 0.5f;
       if (palivoOffsetL > PALIVO_OFFSET_MAX_L) palivoOffsetL = PALIVO_OFFSET_MAX_L;
       break;
-    case 5:
+    case SM_OFFSET_BATERIE:
       napetiOffsetV += 0.1f;
       if (napetiOffsetV > NAPETI_OFFSET_MAX_V) napetiOffsetV = NAPETI_OFFSET_MAX_V;
       break;
-    case 6:
+    case SM_RPM_NAHORU:
       gearRpmNahoru += 100.0f;
       if (gearRpmNahoru > GEAR_RPM_NAHORU_MAX) gearRpmNahoru = GEAR_RPM_NAHORU_MAX;
       if (gearRpmDolu > gearRpmNahoru - 100.0f) gearRpmDolu = gearRpmNahoru - 100.0f;
       break;
-    case 7:
+    case SM_RPM_DOLU:
       gearRpmDolu += 100.0f;
       if (gearRpmDolu > GEAR_RPM_DOLU_MAX) gearRpmDolu = GEAR_RPM_DOLU_MAX;
       if (gearRpmDolu > gearRpmNahoru - 100.0f) gearRpmDolu = gearRpmNahoru - 100.0f;
       break;
-    case 8:
+    case SM_PULZY_KM:
       pulzyNaKm = (pulzyNaKm == 7840.0f) ? 3920.0f : 7840.0f;
       break;
-    case 9:
+    case SM_JAS_OLED:
+      oledJasRezim = (uint8_t)((oledJasRezim + 1U) % (OLED_JAS_AUTO_REZIM + 1U));
+      aktualizujJasDispleje(true);
+      break;
+    case SM_ANIMACE:
+      animaceRezim = (uint8_t)((animaceRezim + 1U) % (ANIMACE_POMALA_REZIM + 1U));
+      break;
+    case SM_RESET_STAT:
       {
         bool ok = vynulujStatistiky(true);
         smZpravaOk = ok;
@@ -150,49 +184,60 @@ void servisMenuPlus() {
       }
       break;
   }
-  if (servisMenuPolozka != 9) oznacKonfiguraciJakoZmenenou();
+  if (servisMenuPolozka != SM_RESET_STAT) oznacKonfiguraciJakoZmenenou();
   uiPrekreslit = true;
 }
 
 // ===== Decrement / − (RESET krátký – editační režim) =====
 void servisMenuMinus() {
   switch (servisMenuPolozka) {
-    case 0: alarmyPovoleny = !alarmyPovoleny; break;
-    case 1: upozorneniNizkePalivoPovoleno = !upozorneniNizkePalivoPovoleno; break;
-    case 2:
+    case SM_ALARM_VODY: alarmyPovoleny = !alarmyPovoleny; break;
+    case SM_ALARM_PALIVO: upozorneniNizkePalivoPovoleno = !upozorneniNizkePalivoPovoleno; break;
+    case SM_OFFSET_VENKU:
       teplotaVenkuOffsetC -= 0.5f;
       if (teplotaVenkuOffsetC < -10.0f) teplotaVenkuOffsetC = -10.0f;
       break;
-    case 3:
+    case SM_OFFSET_VODY:
       teplotaOffsetC -= 0.5f;
       if (teplotaOffsetC < -10.0f) teplotaOffsetC = -10.0f;
       break;
-    case 4:
+    case SM_OFFSET_PALIVO:
       palivoOffsetL -= 0.5f;
       if (palivoOffsetL < PALIVO_OFFSET_MIN_L) palivoOffsetL = PALIVO_OFFSET_MIN_L;
       break;
-    case 5:
+    case SM_OFFSET_BATERIE:
       napetiOffsetV -= 0.1f;
       if (napetiOffsetV < NAPETI_OFFSET_MIN_V) napetiOffsetV = NAPETI_OFFSET_MIN_V;
       break;
-    case 6:
+    case SM_RPM_NAHORU:
       gearRpmNahoru -= 100.0f;
       if (gearRpmNahoru < GEAR_RPM_NAHORU_MIN) gearRpmNahoru = GEAR_RPM_NAHORU_MIN;
       if (gearRpmDolu > gearRpmNahoru - 100.0f) gearRpmDolu = gearRpmNahoru - 100.0f;
       break;
-    case 7:
+    case SM_RPM_DOLU:
       gearRpmDolu -= 100.0f;
       if (gearRpmDolu < GEAR_RPM_DOLU_MIN) gearRpmDolu = GEAR_RPM_DOLU_MIN;
       break;
-    case 8:
+    case SM_PULZY_KM:
       pulzyNaKm = (pulzyNaKm == 7840.0f) ? 3920.0f : 7840.0f;
       break;
-    case 9:
+    case SM_JAS_OLED:
+      oledJasRezim = (oledJasRezim == OLED_JAS_MAX_REZIM)
+                       ? OLED_JAS_AUTO_REZIM
+                       : (uint8_t)(oledJasRezim - 1U);
+      aktualizujJasDispleje(true);
+      break;
+    case SM_ANIMACE:
+      animaceRezim = (animaceRezim == ANIMACE_VYP_REZIM)
+                       ? ANIMACE_POMALA_REZIM
+                       : (uint8_t)(animaceRezim - 1U);
+      break;
+    case SM_RESET_STAT:
       // Reset – minus nedělá nic, trigger jen přes +
       break;
   }
   if (gearRpmDolu < GEAR_RPM_DOLU_MIN) gearRpmDolu = GEAR_RPM_DOLU_MIN;
-  if (servisMenuPolozka != 9) oznacKonfiguraciJakoZmenenou();
+  if (servisMenuPolozka != SM_RESET_STAT) oznacKonfiguraciJakoZmenenou();
   uiPrekreslit = true;
 }
 

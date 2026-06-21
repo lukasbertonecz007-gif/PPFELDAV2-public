@@ -1,6 +1,9 @@
 #include <Arduino.h>
 #include "globals.h"
 
+static bool i2cRecoverySerieAktivni = false;
+static bool i2cRecoveryFailZalogovan = false;
+
 // ====== Čtení odporu snímače přes ADS1115 ======
 // Topologie: 8V → R_série (cívka budíku) → uzel → čidlo → GND
 // ADS měří napětí na uzlu přes dělič R1(15K)/R2(10K): Vadc = Vuzel * R2/(R1+R2)
@@ -73,7 +76,10 @@ static void i2cRecovery() {
   i2cPosledniObnova = now;
   adsChybPocet = 0;
   Serial.println("I2C: bus recovery zahajena...");
-  zapisErrorLog("WARN", "I2C_RECOVERY_START", "ADS/I2C recovery started");
+  if (!i2cRecoverySerieAktivni) {
+    zapisErrorLog("WARN", "I2C_RECOVERY_START", "ADS/I2C recovery started");
+    i2cRecoverySerieAktivni = true;
+  }
   Wire.end();
   delay(5);
   // Manuální bitbang – uvolnění zamrzlého slave (9 SCL pulsů)
@@ -111,10 +117,17 @@ static void i2cRecovery() {
     ads.setGain(GAIN_TWOTHIRDS);
     ads.setDataRate(RATE_ADS1115_860SPS);
     Serial.println("I2C: recovery OK, ADS ready.");
-    zapisErrorLog("INFO", "I2C_RECOVERY_OK", "ADS ready");
+    if (i2cRecoverySerieAktivni) {
+      zapisErrorLog("INFO", "I2C_RECOVERY_OK", "ADS ready");
+    }
+    i2cRecoverySerieAktivni = false;
+    i2cRecoveryFailZalogovan = false;
   } else {
     Serial.println("I2C: recovery dokoncena, ADS stale nereaguje.");
-    zapisErrorLog("ERROR", "I2C_RECOVERY_FAIL", "ADS still not responding");
+    if (!i2cRecoveryFailZalogovan) {
+      zapisErrorLog("ERROR", "I2C_RECOVERY_FAIL", "ADS still not responding");
+      i2cRecoveryFailZalogovan = true;
+    }
   }
 }
 
