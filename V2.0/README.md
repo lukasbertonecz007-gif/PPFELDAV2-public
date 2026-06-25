@@ -3,6 +3,15 @@
 Tento dokument odpovida souborum ve slozce `V2.0/`.
 ADS1115 je zde provozovan na **3.3 V**.
 
+## Licence
+
+Projekt je zverejnen jako source-available pouze pro osobni, vzdelavaci,
+hobby, servisni a nekomercni pouziti. Komercni pouziti, prodej, placena
+instalace nebo prodej odvozenych zarizeni/PCB/firmwaru neni povolen bez
+predchoziho pisemneho souhlasu autora.
+
+Podrobnosti jsou v korenovem souboru `LICENSE`.
+
 ## 1) Napajeni a zem
 
 - ESP32 DevKit napajet stabilnim 5V (USB nebo step-down z auta).

@@ -1,21 +1,68 @@
-MIT License
+PPFELDA Source-Available Non-Commercial License
 
-Copyright (c) 2026 Lukasbertone
+Copyright (c) 2026 Lukas Bertone
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This repository is published as source-available software and hardware
+documentation. It is not released as open source under the Open Source
+Definition, because commercial use by third parties is not permitted.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Allowed use
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+You may view, study, build, flash, and modify this project for personal,
+educational, hobby, repair, and non-commercial use.
+
+You may make a small number of copies for your own personal devices or for
+non-commercial testing.
+
+2. Prohibited use
+
+Without prior written permission from the copyright holder, you may not:
+
+- sell this project, firmware, PCB designs, documentation, or derived works,
+- sell devices, kits, PCBs, firmware images, or services based on this project,
+- use this project or any substantial part of it in a commercial product,
+- use this project or any substantial part of it for paid installation,
+  manufacturing, support, consulting, or similar commercial activity,
+- redistribute modified versions in a way that suggests they are official,
+- remove copyright notices, license notices, or attribution,
+- claim authorship of this project or derived work based on it.
+
+3. Redistribution
+
+Redistribution of the original or modified source is allowed only for
+non-commercial purposes and only if this license, copyright notice, and clear
+attribution to the original project are included.
+
+Modified versions must be clearly marked as modified and must not use the
+original project name in a way that suggests endorsement by the copyright holder.
+
+4. Author rights
+
+The copyright holder reserves the right to use, manufacture, sell, license,
+and commercially distribute this project, firmware, PCB designs, documentation,
+finished devices, and derived works.
+
+The non-commercial restrictions in this license apply to third parties, not to
+the copyright holder.
+
+5. Third-party components
+
+This project uses third-party libraries and frameworks. Those components remain
+under their own licenses. See `THIRD_PARTY_NOTICES.md` where applicable.
+
+This license applies only to original project files created for PPFELDA.
+
+6. No warranty
+
+This project is provided "as is", without warranty of any kind. Use it at your
+own risk, especially in a vehicle or any electrical system where incorrect
+wiring, firmware errors, or hardware faults may cause damage or unsafe behavior.
+
+The copyright holder is not liable for any claim, damage, loss, or other
+liability arising from use of this project.
+
+7. Commercial permission
+
+For commercial use, manufacturing, resale, paid installation, or other
+commercial permission, contact the copyright holder and obtain written approval
+before using the project.
