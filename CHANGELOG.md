@@ -1,6 +1,6 @@
 # Historie verzi
 
-## PPFELDA V2 V1.2E experimental
+## OpenFelicia V1.2E experimental
 
 Testovaci verejna verze palubniho pocitace pro Skoda Felicia 1.3 MPI.
 
@@ -18,6 +18,6 @@ Testovaci verejna verze palubniho pocitace pro Skoda Felicia 1.3 MPI.
 
 ### Poznamky
 
-- Firmware se identifikuje jako `PPFELDA V2 V1.2E`.
+- Firmware se identifikuje jako `OpenFelicia V1.2E`.
 - Verze je stale experimental, proto je vhodne ji otestovat v aute pred oznacenim jako stabilni.
 - Data na SD karte zustavaji ve stejnem formatu textovych souboru, novy firmware pouze doplni kontrolni CRC radek.

@@ -1,10 +1,12 @@
-# PPFELDAV2 public
+# OpenFelicia public
 
 Veřejna verze palubního počítace pro škoda Felicia 1.3 MPI.
 
 Zdrojový kod je ve složce `V2.0/`. Projekt je připravený pro PlatformIO.
 
-Aktualni verejna testovaci verze: `PPFELDA V2 V1.2E experimental`.
+Aktualni verejna testovaci verze: `OpenFelicia V1.2E experimental`.
+
+Codename: PPV2.
 
 Zmeny jsou popsane v `CHANGELOG.md`.
 

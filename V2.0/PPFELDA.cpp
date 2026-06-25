@@ -180,7 +180,7 @@ void setup() {
   vykresliStartovniObrazovku(0.0f, "Spouštění...");  // zobraz hned při startu
 
 #if PPFELDA_MA_BT
-  btAktivni = SerialBT.begin("SkodaFelicia");  // ~300-600ms blokace – po displeji
+  btAktivni = SerialBT.begin("OpenFelicia");  // ~300-600ms blokace – po displeji
   if (!btAktivni) {
     Serial.println("Bluetooth se nepodarilo inicializovat.");
   }

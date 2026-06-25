@@ -1,4 +1,4 @@
-﻿# PPFELDA - zapojeni (V2.0)
+# OpenFelicia - zapojeni
 
 Tento dokument odpovida souborum ve slozce `V2.0/`.
 ADS1115 je zde provozovan na **3.3 V**.

@@ -1,7 +1,7 @@
 # Third-Party Notices
 
-PPFELDA uses third-party libraries and frameworks. They are not covered by the
-PPFELDA Source-Available Non-Commercial License; they keep their own licenses.
+OpenFelicia uses third-party libraries and frameworks. They are not covered by the
+OpenFelicia Source-Available Non-Commercial License; they keep their own licenses.
 
 Known dependencies from `platformio.ini` and the ESP32 Arduino framework:
 

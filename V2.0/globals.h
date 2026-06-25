@@ -27,7 +27,7 @@
 #endif
 #endif
 
-constexpr const char* FW_NAME    = "PPFELDA V2";
+constexpr const char* FW_NAME    = "OpenFelicia";
 constexpr const char* FW_VERSION = "V1.2E";
 
 // ===== KONFIGURACE RPM =====
