@@ -1,6 +1,10 @@
 #include <Arduino.h>
 #include "globals.h"
 
+static RtcDateTime rtcCachePosledniPlatny(0);
+static bool rtcCacheMaPlatny = false;
+static unsigned long rtcCachePosledniPlatnyMs = 0;
+
 // ====== Pomocné utility ======
 
 float omezNaRozsah(float x, float a, float b) {
@@ -9,6 +13,39 @@ float omezNaRozsah(float x, float a, float b) {
 
 bool senderOdporValidni(float rOhm, float minOhm, float maxOhm) {
   return isfinite(rOhm) && rOhm >= minOhm && rOhm <= maxOhm;
+}
+
+bool rtcCasPouzitelny(const RtcDateTime& dt) {
+  return dt.Year() >= 2020 && dt.Year() <= 2099 && dt.TotalSeconds64() > 0;
+}
+
+bool nactiStabilniRtcCas(RtcDateTime& out, bool povolitCache) {
+  if (Rtc.IsDateTimeValid()) {
+    RtcDateTime dt = Rtc.GetDateTime();
+    if (rtcCasPouzitelny(dt)) {
+      rtcCachePosledniPlatny = dt;
+      rtcCacheMaPlatny = true;
+      rtcCachePosledniPlatnyMs = millis();
+      out = dt;
+      return true;
+    }
+  }
+
+  if (povolitCache && rtcCacheMaPlatny) {
+    unsigned long stariMs = millis() - rtcCachePosledniPlatnyMs;
+    if (stariMs <= RTC_CACHE_MAX_MS) {
+      out = rtcCachePosledniPlatny + (int32_t)(stariMs / 1000UL);
+      return true;
+    }
+  }
+
+  out = RtcDateTime(0);
+  return false;
+}
+
+unsigned long rtcStabilniCacheStariMs() {
+  if (!rtcCacheMaPlatny) return ULONG_MAX;
+  return millis() - rtcCachePosledniPlatnyMs;
 }
 
 int datumKlic(const RtcDateTime& dt) {

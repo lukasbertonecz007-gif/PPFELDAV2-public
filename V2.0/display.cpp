@@ -50,9 +50,9 @@ void aktualizujJasDispleje(bool vynutit) {
     kontrast = OLED_KONTRAST_STRED;
   } else if (oledJasRezim == OLED_JAS_NOC_REZIM) {
     kontrast = OLED_KONTRAST_NOC;
-  } else if (oledJasRezim == OLED_JAS_AUTO_REZIM && Rtc.IsDateTimeValid()) {
-    RtcDateTime dt = Rtc.GetDateTime();
-    if (dt.Year() >= 2020 && dt.Year() <= 2099) {
+  } else if (oledJasRezim == OLED_JAS_AUTO_REZIM) {
+    RtcDateTime dt;
+    if (nactiStabilniRtcCas(dt)) {
       uint8_t hodina = dt.Hour();
       bool noc = hodina >= OLED_AUTO_NOC_OD_H || hodina < OLED_AUTO_NOC_DO_H;
       kontrast = noc ? OLED_KONTRAST_NOC : OLED_KONTRAST_MAX;
@@ -262,7 +262,8 @@ void vykresliDisplej() {
     return;
   }
 
-  bool rtcValid = Rtc.IsDateTimeValid();
+  RtcDateTime stabilniCas;
+  bool rtcValid = nactiStabilniRtcCas(stabilniCas);
   bool alarmTriggered = (alarmyPovoleny && !isnan(teplotaVody) && (teplotaVody > 90.0f));
   if (dvereOtevrene || alarmTriggered) {
     zrusAnimaciStranky();
@@ -273,13 +274,32 @@ void vykresliDisplej() {
 
     char timeStr[9];
     if (rtcValid) {
-      RtcDateTime now = Rtc.GetDateTime();
-      snprintf(timeStr, sizeof(timeStr), "%02u:%02u", (unsigned)now.Hour(), (unsigned)now.Minute());
+      snprintf(timeStr, sizeof(timeStr), "%02u:%02u", (unsigned)stabilniCas.Hour(), (unsigned)stabilniCas.Minute());
     } else {
       strcpy(timeStr, "--:--");
     }
 
-    u8g2.drawStr(20, 27, timeStr);
+    const int timeWidth = u8g2.getStrWidth(timeStr);
+    const int timeX = (128 - timeWidth) / 2;
+    u8g2.drawStr(timeX, 27, timeStr);
+
+    uint16_t warningMask = aktivniVarovaniMask();
+    bool kritickeVarovani = (warningMask & VAROVANI_KRITICKE_MASK) != 0;
+    if (warningMask != 0 && (!kritickeVarovani || blikaniZapnuto)) {
+      const int warningX = (timeX - WARNING_W) / 2;
+      const int warningY = (28 - WARNING_H) / 2;
+      u8g2.setBitmapMode(1);
+      u8g2.drawXBMP(warningX, warningY, WARNING_W, WARNING_H, warning_icon_bits);
+    }
+#if PPFELDA_MA_BT
+    if (btKlientPripojen) {
+      const int btAreaX = timeX + timeWidth;
+      const int btX = btAreaX + (128 - btAreaX - BLUETOOTH_W) / 2;
+      const int btY = (28 - BLUETOOTH_H) / 2;
+      u8g2.setBitmapMode(1);
+      u8g2.drawXBMP(btX, btY, BLUETOOTH_W, BLUETOOTH_H, bluetooth_icon_bits);
+    }
+#endif
     u8g2.drawLine(0, 28, 128, 28);
     u8g2.drawLine(0, 29, 128, 29);
 
@@ -505,7 +525,8 @@ bool potrebujePrekreslitUI() {
   static bool rtcPrevValid = true;
   static uint8_t lastMinute = 255;
 
-  bool rtcValid = Rtc.IsDateTimeValid();
+  RtcDateTime stabilniCas;
+  bool rtcValid = nactiStabilniRtcCas(stabilniCas);
   bool dirty = false;
   if (infoAnimAktivni) dirty = true;
 
@@ -517,6 +538,22 @@ bool potrebujePrekreslitUI() {
   static bool lastAlarm = false;
   if (alarmNow != lastAlarm) { lastAlarm = alarmNow; dirty = true; }
   if (alarmNow) dirty = true;  // při aktivním alarmu vždy refresh (blikání)
+
+  uint16_t warningMask = aktivniVarovaniMask();
+  static uint16_t lastWarningMask = UINT16_MAX;
+  if (warningMask != lastWarningMask) {
+    lastWarningMask = warningMask;
+    dirty = true;
+  }
+  if ((warningMask & VAROVANI_KRITICKE_MASK) != 0) dirty = true;
+
+#if PPFELDA_MA_BT
+  static bool lastBtClient = false;
+  if (btKlientPripojen != lastBtClient) {
+    lastBtClient = btKlientPripojen;
+    dirty = true;
+  }
+#endif
 
   static bool lastServisMenu = false;
   if (servisMenuAktivni != lastServisMenu) { lastServisMenu = servisMenuAktivni; dirty = true; }
@@ -532,7 +569,7 @@ bool potrebujePrekreslitUI() {
   }
 
   if (rtcValid) {
-    uint8_t m = Rtc.GetDateTime().Minute();
+    uint8_t m = stabilniCas.Minute();
     if (m != lastMinute) {
       lastMinute = m;
       dirty = true;

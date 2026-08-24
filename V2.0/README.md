@@ -1,6 +1,8 @@
 # OpenFelicia - zapojeni
 
 Tento dokument odpovida souborum ve slozce `V2.0/`.
+Codename projektu: PPV2.
+Aktualni verejny experimentalni firmware: **OpenFelicia V1.4A/E (2026-08-24)**.
 ADS1115 je zde provozovan na **3.3 V**.
 
 ## Licence
@@ -82,7 +84,7 @@ pio run --target upload
 # Upload na konkretni port
 pio run --target upload --upload-port COM4
 
-# Upload s vymazanim Flash (nutne po zmene partition table, napr. pri prechodu na huge_app)
+# Upload s vymazanim Flash (nutne po zmene partition table, napr. pri prechodu na ota_nofs_4MB)
 pio run --target erase --upload-port COM4
 pio run --target upload --upload-port COM4
 
@@ -94,3 +96,68 @@ pio device monitor
 # Seznam portu
 pio device list
 ```
+
+## 8) SD soubory
+
+SD karta slouzi pro konfiguraci, statistiky a logy. Firmware update pres SD je zamerne vypnuty;
+nova verze se nahrava pres USB/COM port.
+
+- `/config.txt` - servisni nastaveni a kalibrace
+- `/consumption.txt` - celkove, trip a denni statistiky
+- `/error.log` - udalosti a chyby s casem
+- `/error.bak` - starsi rotovany error log
+- `/system.txt` - posledni rychly stav systemu pro diagnostiku
+- `/service.txt` - celkovy najezd vozidla a servisni intervaly
+- `/service.bak` - zaloha servisnich udaju
+
+`system.txt` se prepisuje pri bootu a potom priblizne kazdou minutu. Obsahuje firmware,
+uptime, reset reason, stav SD/RTC/ADS, napeti, rychlost, otacky, spotrebu a najezdy.
+
+## 9) Kalibrace spotreby
+
+Zakladni vypocet vychazi z otevreni vstriku a prutoku `VSTRIK_TOK_CC_MIN`.
+Jemna korekce je `spotrebaKorekce`:
+
+- `100 %` = bez korekce
+- `110 %` = spotreba se nasobi 1.10
+- `90 %` = spotreba se nasobi 0.90
+
+Nastaveni:
+
+- servisni menu: `Spotr kor`
+- serial/BT prikaz: `spotr <50..150>`
+
+## 10) RTC ochrana
+
+Kdyz RTC kratce vrati neplatny cas, displej a log pouziji posledni platny cas z cache.
+Cache je kratkodoba, aby hodiny pri jednorazovem vypadku neblikly na `--:--`.
+
+## 11) Bluetooth a servisni intervaly
+
+Bluetooth Classic bezi pod nazvem `OpenFelicia`. Ikona vpravo od hodin se zobrazi
+jen tehdy, kdyz je opravdu pripojen klient. Prikazy funguji stejne pres Bluetooth i USB Serial.
+
+```text
+km                         # zobrazit celkovy najezd vozidla
+km 245123.4                # nastavit stav tachometru; pouze kdyz auto stoji
+servis                     # zobrazit stav vsech intervalu
+servis.olej 10000          # interval oleje v km; 0 = vypnout
+servis.olej.reset           # reset po vymene oleje
+servis.rozvody 60000       # interval rozvodu v km; 0 = vypnout
+servis.rozvody.reset        # reset po vymene rozvodu
+```
+
+Celkovy najezd vozidla je oddeleny od lifetime vzdalenosti pouzivane pro prumernou
+spotrebu. Jeho nastaveni proto nezmeni dosavadni prumernou spotrebu.
+
+Servisni menu obsahuje polozky `Najeto km`, `Olej`, `Reset olej`, `Rozvody`,
+`Reset rozv.` a `Varovani`. Detail informacni polozky se otevre dlouhym stiskem BTN.
+Resetovaci akce vyzaduji druhe potvrzeni.
+
+## 12) Stavove ikony a filtry
+
+- Trojuhelnik vlevo od hodin znamena aktivni servisni upozorneni nebo poruchu.
+- Kriticka varovani trojuhelnik rozblikaji; servisni interval sviti trvale az do resetu.
+- `vstrik.filtr <200..2000>` nastavi minimalni platnou sirku pulzu v mikrosekundach.
+- Vychozi filtr vstriku je 800 us; pulzy nad 30 ms se povazuji za chybnou dlouhou hranu.
+- Diagnostika `d` vypisuje pocty odmitnutych pulzu vstriku i rychlosti.

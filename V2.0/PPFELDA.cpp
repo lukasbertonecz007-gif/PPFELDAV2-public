@@ -9,12 +9,16 @@ volatile uint32_t vstrikOtevreniUsAkum = 0;
 volatile uint32_t vstrikPosledniHranaUs = 0;
 volatile bool vstrikOtevreno = false;
 volatile uint32_t vstrikPocetPulzu = 0;
+volatile uint32_t vstrikOdmitnutoKratke = 0;
+volatile uint32_t vstrikOdmitnutoDlouhe = 0;
 volatile bool vstrikAktivniNizko = true;
 bool vstrikPolaritaAutoOtocena = false;
+volatile uint32_t vstrikFiltrUs = VSTRIK_FILTR_US;
 
 // pro autokalibraci průtoku
 float PALIVO_NA_US = 0.0f;                       // L/us pro jeden měřený vstřik
 float VSTRIK_TOK_CC_MIN = VSTRIK_CC_ZA_MIN;
+float spotrebaKorekce = SPOTREBA_KOREKCE_DEFAULT;
 int motorPocetVstriku = MOTOR_POCET_VSTRIKU_DEFAULT;
 int merenyPocetVstriku = MERENY_POCET_VSTRIKU_DEFAULT;
 float cidloNapajeni = CIDLO_NAPAJENI_DEFAULT;
@@ -44,6 +48,7 @@ const char* bootFazeText = "Spouštění...";
 BluetoothSerial SerialBT;
 #pragma GCC diagnostic pop
 bool btAktivni = false;
+bool btKlientPripojen = false;
 #endif
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 RtcDS3231<TwoWire> Rtc(Wire);
@@ -53,6 +58,7 @@ unsigned long i2cPosledniObnova = 0;
 volatile uint32_t rychlostPeriodaBuf[RYCHLOST_PERIODA_N] = { 0 };
 volatile uint8_t rychlostPeriodaZapisIdx = 0;
 volatile uint8_t rychlostPeriodaPlatnych = 0;
+volatile uint32_t rychlostOdmitnutoGlitch = 0;
 
 volatile uint32_t rychlostPulzuPocet = 0;      // rychlost
 volatile uint32_t rychlostPosledniPulzUs = 0;  // čas posledního validního pulzů (us)
@@ -132,6 +138,8 @@ bool diagRychlostAktualni = false;
 
 uint32_t diagVstrikOknoUs = 0;
 uint32_t diagVstrikPulzy = 0;
+uint32_t diagVstrikOdmitnutoKratke = 0;
+uint32_t diagVstrikOdmitnutoDlouhe = 0;
 float diagPalivoSyreLh = 0.0f;
 
 // RPM dělič a filtr
@@ -162,6 +170,16 @@ uint64_t tripMetry_u64 = 0;        // metry od posledniho resetu
 uint64_t tripPalivoUl_u64 = 0;     // mikrolitry od posledniho resetu
 uint64_t denniMetry_u64 = 0;       // metry/den
 uint32_t casMotoru_s_u32 = 0;      // rezerva
+
+// Skutečný stav tachometru je oddělený od lifetime statistik spotřeby.
+uint64_t vozidloNajetoM_u64 = 0;
+bool vozidloNajetoNastaveno = false;
+uint64_t servisOlejPosledniM_u64 = 0;
+uint64_t servisOlejIntervalM_u64 = 0;
+bool servisOlejNastaven = false;
+uint64_t servisRozvodyPosledniM_u64 = 0;
+uint64_t servisRozvodyIntervalM_u64 = 0;
+bool servisRozvodyNastaveny = false;
 
 uint64_t posledniUlozeneMetry_u64 = 0;
 unsigned long posledniUlozeniMs = 0;
@@ -246,7 +264,8 @@ void setup() {
 
   Rtc.Begin();
   if (!Rtc.GetIsRunning()) Rtc.SetIsRunning(true);
-  rtcPripravena = Rtc.IsDateTimeValid();
+  RtcDateTime startRtcCas;
+  rtcPripravena = nactiStabilniRtcCas(startRtcCas, false);
   if (!rtcPripravena) {
     Serial.println("RTC neni validni, datum/cas nebyl automaticky prepsan.");
   }
@@ -256,7 +275,7 @@ void setup() {
   vykresliStartovniObrazovku(bootFaze, bootFazeText);
   if (!rtcPripravena) { for (uint8_t _b = 0; _b < 8; _b++) { vykresliStartovniObrazovku(bootFaze, _b & 1 ? "" : bootFazeText); delay(250); } }
   startZacatek = millis();
-  posledniKlicData = rtcPripravena ? datumKlic(Rtc.GetDateTime()) : -1;
+  posledniKlicData = rtcPripravena ? datumKlic(startRtcCas) : -1;
   startovani = true;
   zalogujStartSystemu();
 

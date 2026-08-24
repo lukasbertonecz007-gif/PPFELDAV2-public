@@ -10,6 +10,8 @@ void vypocetPalivoRychlost() {
   uint32_t lastPulseUsCopy;
   uint32_t injAccUs;
   uint32_t injPulseCountCopy;
+  uint32_t injRejectedShortCopy;
+  uint32_t injRejectedLongCopy;
   uint32_t periodBufCopy[RYCHLOST_PERIODA_N];
   uint8_t periodCountCopy;
 
@@ -18,10 +20,15 @@ void vypocetPalivoRychlost() {
   lastPulseUsCopy = rychlostPosledniPulzUs;
   injAccUs = vstrikOtevreniUsAkum;
   injPulseCountCopy = vstrikPocetPulzu;
+  injRejectedShortCopy = vstrikOdmitnutoKratke;
+  injRejectedLongCopy = vstrikOdmitnutoDlouhe;
   periodCountCopy = rychlostPeriodaPlatnych;
   for (uint8_t i = 0; i < RYCHLOST_PERIODA_N; ++i) periodBufCopy[i] = rychlostPeriodaBuf[i];
   vstrikOtevreniUsAkum = 0;  // vynulovat okno pro další periodu
   interrupts();
+
+  diagVstrikOdmitnutoKratke = injRejectedShortCopy;
+  diagVstrikOdmitnutoDlouhe = injRejectedLongCopy;
 
   uint32_t dSpeedCount = sc - rychlostPosledniPulzuPocet;
   rychlostPosledniPulzuPocet = sc;
@@ -37,7 +44,12 @@ void vypocetPalivoRychlost() {
 
   unsigned long speedWindowMs = nowMs - rychlostOknoZacatek;
   uint32_t dWindowPulses = sc - rychlostOknoZakladPocet;
-  bool rezimNizkaRychlost = rychlostVozu < RYCHLOST_NIZKA_KMH;
+  static bool rezimNizkaRychlost = true;
+  if (rezimNizkaRychlost && rychlostVozu >= RYCHLOST_NIZKA_VYSTUP_KMH) {
+    rezimNizkaRychlost = false;
+  } else if (!rezimNizkaRychlost && rychlostVozu <= RYCHLOST_NIZKA_VSTUP_KMH) {
+    rezimNizkaRychlost = true;
+  }
   unsigned long minOknoMs = rezimNizkaRychlost ? RYCHLOST_OKNO_NIZKA_MS : RYCHLOST_OKNO_MS;
   unsigned long maxOknoMs = rezimNizkaRychlost ? RYCHLOST_OKNO_NIZKA_MAX_MS : RYCHLOST_OKNO_MAX_MS;
   if ((dWindowPulses > 0 && speedWindowMs >= minOknoMs) || speedWindowMs >= maxOknoMs) {
@@ -70,6 +82,17 @@ void vypocetPalivoRychlost() {
   diagRychlostPocetKmh = rychlostOknoKmh;
   diagRychlostPeriodaKmh = periodSpeed;
 
+  float countSpeedFiltered = rychlostOknoKmh;
+  float periodSpeedFiltered = periodSpeed;
+  if (rezimNizkaRychlost && countSpeedFiltered > 0.5f && periodSpeedFiltered > 0.5f) {
+    constexpr float MAX_POMER_ZDROJU = 1.45f;
+    if (countSpeedFiltered > periodSpeedFiltered * MAX_POMER_ZDROJU) {
+      countSpeedFiltered = periodSpeedFiltered * MAX_POMER_ZDROJU;
+    } else if (periodSpeedFiltered > countSpeedFiltered * MAX_POMER_ZDROJU) {
+      periodSpeedFiltered = countSpeedFiltered * MAX_POMER_ZDROJU;
+    }
+  }
+
   float targetSpeed = 0.0f;
   if (!speedFresh) {
     rychlostOknoKmh = 0.0f;
@@ -78,27 +101,33 @@ void vypocetPalivoRychlost() {
     diagRychlostMedianUs = 0;
     rychlostOknoZacatek = nowMs;
     rychlostOknoZakladPocet = sc;
-  } else if (rychlostOknoKmh <= 0.1f) {
-    targetSpeed = periodSpeed;
-  } else if (rychlostOknoKmh >= RYCHLOST_BLEND_KMH) {
-    targetSpeed = rychlostOknoKmh;
+  } else if (countSpeedFiltered <= 0.1f) {
+    targetSpeed = periodSpeedFiltered;
+  } else if (countSpeedFiltered >= RYCHLOST_BLEND_KMH) {
+    targetSpeed = countSpeedFiltered;
   } else {
-    float wCount = rychlostOknoKmh / RYCHLOST_BLEND_KMH;
-    targetSpeed = (wCount * rychlostOknoKmh) + ((1.0f - wCount) * periodSpeed);
+    float wCount = countSpeedFiltered / RYCHLOST_BLEND_KMH;
+    targetSpeed = (wCount * countSpeedFiltered) + ((1.0f - wCount) * periodSpeedFiltered);
   }
 
   float dtS = (rychlostPosledniVypocet == 0) ? 0.10f : ((float)(nowMs - rychlostPosledniVypocet) / 1000.0f);
   rychlostPosledniVypocet = nowMs;
-  bool filtrujNizkouRychlost = (rychlostVozu < RYCHLOST_NIZKA_KMH) || (targetSpeed < RYCHLOST_NIZKA_KMH);
+  static float rychlostPlynula = 0.0f;
+  bool filtrujNizkouRychlost = rezimNizkaRychlost || (targetSpeed < RYCHLOST_NIZKA_KMH);
   float maxRise = filtrujNizkouRychlost ? (25.0f * dtS + 0.8f) : (90.0f * dtS + 2.0f);
   float maxFall = filtrujNizkouRychlost ? (45.0f * dtS + 1.5f) : (130.0f * dtS + 3.0f);
-  if (targetSpeed > rychlostVozu + maxRise) targetSpeed = rychlostVozu + maxRise;
-  if (targetSpeed < rychlostVozu - maxFall) targetSpeed = rychlostVozu - maxFall;
+  if (targetSpeed > rychlostPlynula + maxRise) targetSpeed = rychlostPlynula + maxRise;
+  if (targetSpeed < rychlostPlynula - maxFall) targetSpeed = rychlostPlynula - maxFall;
   if (targetSpeed < 0.0f) targetSpeed = 0.0f;
 
   float alphaSpdFiltered = !speedFresh ? 0.75f : ((targetSpeed < 1.0f) ? 0.30f : ((targetSpeed < RYCHLOST_NIZKA_KMH) ? 0.10f : 0.18f));
-  rychlostVozu = alphaSpdFiltered * targetSpeed + (1.0f - alphaSpdFiltered) * rychlostVozu;
-  if (rychlostVozu < 0.1f) rychlostVozu = 0.0f;
+  rychlostPlynula = alphaSpdFiltered * targetSpeed + (1.0f - alphaSpdFiltered) * rychlostPlynula;
+  if (rychlostPlynula < 0.1f) rychlostPlynula = 0.0f;
+  if (filtrujNizkouRychlost) {
+    rychlostVozu = roundf(rychlostPlynula / RYCHLOST_KROK_KMH) * RYCHLOST_KROK_KMH;
+  } else {
+    rychlostVozu = rychlostPlynula;
+  }
 
   // přičíst vzdálenost jen podle pulzů
   double meters_per_pulse = 1000.0 / (double)pulzyNaKm;
@@ -113,6 +142,7 @@ void vypocetPalivoRychlost() {
   celkoveMetry_u64 += add_m;
   tripMetry_u64 += add_m;
   denniMetry_u64 += add_m;
+  if (vozidloNajetoNastaveno) vozidloNajetoM_u64 += add_m;
 
   celkovaVzdalenost = (float)(celkoveMetry_u64 / 1000.0);
   tripVzdalenost = (float)(tripMetry_u64 / 1000.0);
@@ -137,6 +167,7 @@ void vypocetPalivoRychlost() {
     double injScale = (double)motorPocetVstriku / (double)merenyPocetVstriku;
     if (injScale < 1.0) injScale = 1.0;
     double L_window = (double)palivoOknoUs * fuelPerUs * injScale;
+    L_window *= (double)spotrebaKorekce;
     double window_s = (double)deltaFuelMs / 1000.0;
 
     float newFuelRate = 0.0f;  // L/h
@@ -174,29 +205,32 @@ void vypocetPalivoRychlost() {
       if (newFuelRate > 40.0f) newFuelRate = 40.0f;  // pojistka proti úletům
     }
 
-    // --- rychlý filtr pro okamžitou spotřebu (L/h) ---
-    const float ALPHA_INST = 0.45f;  // bylo 0.8 – příliš trhavé, vyhladit
     diagPalivoSyreLh = newFuelRate;
-    palivoTokInst = ALPHA_INST * newFuelRate + (1.0f - ALPHA_INST) * palivoTokInst;
-    if (palivoTokInst < 0.0f) palivoTokInst = 0.0f;
+    const bool bezVstriku = (palivoOknoPulzu == 0 || palivoOknoUs == 0);
 
-    // --- adaptivní filtr pro "pomalou" L/h (volnoběh / integrace) ---
-    float alphaFuel;
-
-    if (palivoOknoUs == 0) {
-      // žádné pulzy -> vypnuté vstřiky / žádné vstřikování
-      alphaFuel = 0.40f;  // rychle stáhnout k nule
-      newFuelRate = 0.0f;
-    } else if (rychlostVozu < 3.0f) {
-      // volnoběh – lambda sonda způsobuje přirozenou variaci ±15-20%, silný filtr aby displej neskákal
-      alphaFuel = 0.02f;  // bylo 0.06
+    if (bezVstriku) {
+      // Celé měřicí okno bez platného pulzu znamená skutečně vypnuté vstřikování.
+      palivoTokInst = 0.0f;
+      spotrebaLh = 0.0f;
     } else {
-      // za jízdy – rychlejší reakce
-      alphaFuel = 0.15f;  // bylo 0.20
-    }
+      // --- rychlý filtr pro okamžitou spotřebu (L/h) ---
+      const float ALPHA_INST = 0.45f;  // bylo 0.8 – příliš trhavé, vyhladit
+      palivoTokInst = ALPHA_INST * newFuelRate + (1.0f - ALPHA_INST) * palivoTokInst;
+      if (palivoTokInst < 0.0f) palivoTokInst = 0.0f;
 
-    spotrebaLh = alphaFuel * newFuelRate + (1.0f - alphaFuel) * spotrebaLh;
-    if (spotrebaLh < 0.0f) spotrebaLh = 0.0f;
+      // --- adaptivní filtr pro "pomalou" L/h (volnoběh / integrace) ---
+      float alphaFuel;
+      if (rychlostVozu < 3.0f) {
+        // volnoběh – lambda sonda způsobuje přirozenou variaci ±15-20%, silný filtr aby displej neskákal
+        alphaFuel = 0.02f;  // bylo 0.06
+      } else {
+        // za jízdy – rychlejší reakce
+        alphaFuel = 0.15f;  // bylo 0.20
+      }
+
+      spotrebaLh = alphaFuel * newFuelRate + (1.0f - alphaFuel) * spotrebaLh;
+      if (spotrebaLh < 0.0f) spotrebaLh = 0.0f;
+    }
 
     // Integrovat celkovou spotřebu. u64 je hlavní zdroj pravdy, float jen kopie pro UI.
     static double palivoUlNevyreseno = 0.0;

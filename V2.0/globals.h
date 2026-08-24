@@ -28,12 +28,15 @@
 #endif
 
 constexpr const char* FW_NAME    = "OpenFelicia";
-constexpr const char* FW_VERSION = "V1.2E";
+constexpr const char* FW_VERSION = "V1.4A/E";
+constexpr const char* FW_DATE    = "2026-08-24";
 
 // ===== KONFIGURACE RPM =====
+// ===== NEMAZAT JINAK PŘESTANE FUNGOVAT NEVÍM PROČ ALE KDYŽ SE TOHLE ODSTRANÍ PŘESTANE TO KOMPLET FUNGOVAT ========
 #ifndef RPM_MODE_FREQ
 #define RPM_MODE_FREQ 1   // 1 = čítání hran (ISR), 0 = pulseIn (blokující fallback)
 #endif
+// ===== NEMAZAT JINAK PŘESTANE FUNGOVAT NEVÍM PROČ ALE KDYŽ SE TOHLE ODSTRANÍ PŘESTANE TO KOMPLET FUNGOVAT ========
 
 // ===== PINY =====
 #ifndef PIN_SDA
@@ -72,6 +75,8 @@ constexpr int   ADS_KAN_VODA                         = 0;
 constexpr int   ADS_KAN_PALIVO                       = 1;
 constexpr int   ADS_KAN_TEPLOTA_VENKU                = 2;
 
+// NEDODĚLANÁ KALIBRACE – JENOM ČÁSTEČNĚ POTŘEBA KOMPLET DOLADIT !!
+// ZATÍM NEMÁM DATA
 constexpr int   PALIVO_TAB_N                         = 6;
 static constexpr float palivoOhmTab[6]               = { 300.0f, 255.0f, 225.0f, 150.0f, 75.0f, 10.0f };
 static constexpr float palivoLitruTab[6]             = { 3.5f, 7.0f, 11.0f, 22.0f, 33.0f, 44.0f };
@@ -86,21 +91,33 @@ constexpr float PALIVO_OFFSET_MAX_L                  = 10.0f;
 //Lehká kalibrace na skutečnou spotřebu – mění se s časem, teplotou, kvalitou paliva atd. – umožňuje nastavit skutečnou spotřebu
 //----------------------------------------------------------------------------------------------------
 constexpr float    VSTRIK_CC_ZA_MIN                  = 155.0f; // Felicia 1.3 AMH vstřikovač 047 906 031 ~125 cc/min @ 2.5–3.0 bar (EV1 hi-Z 18.5Ω) (původně 125c)
-constexpr uint32_t VSTRIK_FILTR_US                   = 500;   // filtr pro měření otevření vstřiku – 1000µs = 1ms (na test 500)
+constexpr uint32_t VSTRIK_FILTR_US                   = 800;   // výchozí minimální šířka platného pulzu vstřiku
+constexpr uint32_t VSTRIK_FILTR_MIN_US               = 200;
+constexpr uint32_t VSTRIK_FILTR_MAX_US               = 2000;
+constexpr uint32_t VSTRIK_PULZ_MAX_US                = 30000; // ochrana před chybnou dlouhou hranou
 constexpr int      MOTOR_POCET_VSTRIKU_DEFAULT       = 4;
 constexpr int      MERENY_POCET_VSTRIKU_DEFAULT      = 1;
+constexpr float    SPOTREBA_KOREKCE_DEFAULT          = 1.0f;
+constexpr float    SPOTREBA_KOREKCE_MIN              = 0.50f;
+constexpr float    SPOTREBA_KOREKCE_MAX              = 1.50f;
 //----------------------------------------------------------------------------------------------------
 
 // ===== KONSTANTY – ČASOVÁNÍ =====
 constexpr unsigned long PALIVO_VZORKOVANI_MS         = 750;  // 750ms = ~5 pulzů při volnoběhu → stabilní průměr
-constexpr float         RYCHLOST_BLEND_KMH           = 12.0f;
+constexpr float         RYCHLOST_BLEND_KMH           = 30.0f;
 constexpr unsigned long RYCHLOST_OKNO_MS             = 250;
 constexpr unsigned long RYCHLOST_OKNO_MAX_MS         = 450;
 constexpr float         RYCHLOST_NIZKA_KMH           = 30.0f;
 constexpr unsigned long RYCHLOST_OKNO_NIZKA_MS       = 750;
 constexpr unsigned long RYCHLOST_OKNO_NIZKA_MAX_MS   = 1100;
 constexpr uint8_t       RYCHLOST_PERIODA_N           = 5;
+constexpr float         RYCHLOST_NIZKA_VSTUP_KMH     = 28.0f;
+constexpr float         RYCHLOST_NIZKA_VYSTUP_KMH    = 34.0f;
+constexpr uint8_t       RYCHLOST_GLITCH_POMER_PROC   = 70;
+constexpr uint32_t      RYCHLOST_GLITCH_REF_MAX_US   = 200000;
+constexpr float         RYCHLOST_KROK_KMH            = 0.5f;
 constexpr unsigned long RYCHLOST_LOG_VYPADEK_MS      = 2500;
+constexpr unsigned long RTC_CACHE_MAX_MS             = 120000UL;
 
 // ===== KONSTANTY – DISPLEJ/IKONY =====
 constexpr uint8_t VODA_W     = 15;
@@ -115,6 +132,10 @@ constexpr uint8_t BATERIE_W  = 15;
 constexpr uint8_t BATERIE_H  = 13;
 constexpr uint8_t SPOTREBA_W = 15;
 constexpr uint8_t SPOTREBA_H = 13;
+constexpr uint8_t BLUETOOTH_W = 20;
+constexpr uint8_t BLUETOOTH_H = 22;
+constexpr uint8_t WARNING_W   = 20;
+constexpr uint8_t WARNING_H   = 22;
 constexpr uint8_t NACTENI_W  = 106;
 constexpr uint8_t NACTENI_H  = 41;
 
@@ -222,6 +243,25 @@ constexpr uint32_t      ERROR_LOG_MAX_BYTES = 65536UL;
 #define SOUBOR_KONFIGURACE_BAK  "/config.bak"
 #define SOUBOR_ERROR_LOG        "/error.log"
 #define SOUBOR_ERROR_LOG_BAK    "/error.bak"
+#define SOUBOR_SYSTEM_STATUS    "/system.txt"
+#define SOUBOR_SERVIS           "/service.txt"
+#define SOUBOR_SERVIS_TMP       "/service.tmp"
+#define SOUBOR_SERVIS_BAK       "/service.bak"
+
+// ===== VAROVÁNÍ =====
+enum VarovaniBit : uint16_t {
+  VAROVANI_SERVIS_OLEJ    = 1U << 0,
+  VAROVANI_SERVIS_ROZVODY = 1U << 1,
+  VAROVANI_PREHRATI       = 1U << 2,
+  VAROVANI_BATERIE        = 1U << 3,
+  VAROVANI_SD             = 1U << 4,
+  VAROVANI_RTC            = 1U << 5,
+  VAROVANI_ADS            = 1U << 6,
+  VAROVANI_CIDLO          = 1U << 7,
+  VAROVANI_PALIVO         = 1U << 8
+};
+constexpr uint16_t VAROVANI_KRITICKE_MASK =
+  VAROVANI_PREHRATI | VAROVANI_BATERIE | VAROVANI_ADS | VAROVANI_CIDLO;
 
 // ===== STRUCT =====
 struct CidloDiag {
@@ -237,6 +277,7 @@ extern Adafruit_ADS1115 ads;
 #if PPFELDA_MA_BT
 extern BluetoothSerial SerialBT;
 extern bool btAktivni;
+extern bool btKlientPripojen;
 #endif
 
 extern U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2;
@@ -257,15 +298,19 @@ extern volatile uint32_t vstrikOtevreniUsAkum;
 extern volatile uint32_t vstrikPosledniHranaUs;
 extern volatile bool     vstrikOtevreno;
 extern volatile uint32_t vstrikPocetPulzu;
+extern volatile uint32_t vstrikOdmitnutoKratke;
+extern volatile uint32_t vstrikOdmitnutoDlouhe;
 extern volatile bool     vstrikAktivniNizko;
 extern bool              vstrikPolaritaAutoOtocena;
+extern volatile uint32_t vstrikFiltrUs;
 extern float             PALIVO_NA_US;
 extern float             VSTRIK_TOK_CC_MIN;
+extern float             spotrebaKorekce;
 extern int               motorPocetVstriku;
 extern int               merenyPocetVstriku;
 extern float             cidloNapajeni;
-extern float             cidloOhmVoda;     // cívka ukazatele teploty vody [Ω]
-extern float             cidloOhmPalivo;   // cívka ukazatele paliva [Ω]
+extern float             cidloOhmVoda;
+extern float             cidloOhmPalivo;
 extern uint32_t      palivoOknoUs;
 extern uint32_t      palivoOknoPulzu;
 extern unsigned long palivoPosledniAktualizace;
@@ -329,7 +374,10 @@ extern bool          diagRychlostAktualni;
 
 extern uint32_t diagVstrikOknoUs;
 extern uint32_t diagVstrikPulzy;
+extern uint32_t diagVstrikOdmitnutoKratke;
+extern uint32_t diagVstrikOdmitnutoDlouhe;
 extern float    diagPalivoSyreLh;
+extern volatile uint32_t rychlostOdmitnutoGlitch;
 
 extern volatile uint32_t otackyHrany;
 extern volatile uint32_t otackyPosledniUs;
@@ -354,6 +402,14 @@ extern uint64_t      tripMetry_u64;
 extern uint64_t      tripPalivoUl_u64;
 extern uint64_t      denniMetry_u64;
 extern uint32_t      casMotoru_s_u32;
+extern uint64_t      vozidloNajetoM_u64;
+extern bool          vozidloNajetoNastaveno;
+extern uint64_t      servisOlejPosledniM_u64;
+extern uint64_t      servisOlejIntervalM_u64;
+extern bool          servisOlejNastaven;
+extern uint64_t      servisRozvodyPosledniM_u64;
+extern uint64_t      servisRozvodyIntervalM_u64;
+extern bool          servisRozvodyNastaveny;
 extern uint64_t      posledniUlozeneMetry_u64;
 extern unsigned long posledniUlozeniMs;
 extern bool          konfigZmenena;
@@ -385,6 +441,8 @@ extern const unsigned char speed_icon_bits[];
 extern const unsigned char rpm_icon_bits[];
 extern const unsigned char batt_icon_bits[];
 extern const unsigned char SPOTREBA_bits[];
+extern const unsigned char bluetooth_icon_bits[];
+extern const unsigned char warning_icon_bits[];
 
 // ===== FORWARD DEKLARACE FUNKCÍ =====
 
@@ -392,6 +450,9 @@ extern const unsigned char SPOTREBA_bits[];
 float    interpolaceN(float x, const float* xv, const float* yv, int n);
 float    omezNaRozsah(float x, float a, float b);
 bool     senderOdporValidni(float rOhm, float minOhm, float maxOhm);
+bool     rtcCasPouzitelny(const RtcDateTime& dt);
+bool     nactiStabilniRtcCas(RtcDateTime& out, bool povolitCache = true);
+unsigned long rtcStabilniCacheStariMs();
 int      datumKlic(const RtcDateTime& dt);
 int16_t  medianAdsSyrovy(int channel);
 uint32_t medianPeriodaUs(const uint32_t* data, uint8_t n);
@@ -404,9 +465,9 @@ void  spocitejVoduAPalivo();
 void  vypocetVenkovniTeploty();
 
 // isr.cpp
-void IRAM_ATTR fuelPulse();
-void IRAM_ATTR speedPulse();
-void IRAM_ATTR rpmIsr();
+void fuelPulse();
+void speedPulse();
+void rpmIsr();
 
 // storage.cpp
 bool jePresnyPrikaz(const char* vstup, const char* prikaz);
@@ -417,9 +478,21 @@ void moznaUlozKonfiguraciSD();
 bool vynulujStatistiky(bool ulozitNaSd = true);
 bool ulozStatistikySD();
 bool ulozKonfiguraciSdNyni();
+bool ulozServisSD();
+bool nastavNajetoVozidlaKm(double km);
+bool nastavServisOlejIntervalKm(uint32_t km);
+bool nastavServisRozvodyIntervalKm(uint32_t km);
+bool resetujServisOlej();
+bool resetujServisRozvody();
+bool servisOlejPoIntervalu();
+bool servisRozvodyPoIntervalu();
+int64_t servisOlejZbyvaM();
+int64_t servisRozvodyZbyvaM();
+uint16_t aktivniVarovaniMask();
 void zapisErrorLog(const char* uroven, const char* kod, const char* detail = nullptr);
 void zalogujStartSystemu();
 void obsluzSystemovyLog();
+void ulozSystemStatus(const char* duvod = nullptr);
 
 // commands.cpp
 void zpracujPrikaz(char* buffer, Stream& stream);

@@ -17,9 +17,14 @@ void IRAM_ATTR fuelPulse() {
   } else if (!isOpen && vstrikOtevreno) {
     // konec pulzů (vstřik se zavřel)
     uint32_t w = now - vstrikPosledniHranaUs;
-    if (w >= VSTRIK_FILTR_US && w < 500000) {  // ignoruj šum + šílené dlouhé pulzy
+    uint32_t minPulseUs = vstrikFiltrUs;
+    if (w >= minPulseUs && w <= VSTRIK_PULZ_MAX_US) {
       vstrikOtevreniUsAkum += w;
       vstrikPocetPulzu++;
+    } else if (w < minPulseUs) {
+      vstrikOdmitnutoKratke++;
+    } else {
+      vstrikOdmitnutoDlouhe++;
     }
     vstrikOtevreno = false;
   }
@@ -27,20 +32,34 @@ void IRAM_ATTR fuelPulse() {
 
 void IRAM_ATTR speedPulse() {
   uint32_t now = micros();
-  if (now - rychlostPosledniUs >= RYCHLOST_FILTR_US) {
-    // perioda mezi dvěma po sobě jdoucími validními pulzy
-    if (rychlostPosledniPulzUs != 0) {
-      uint32_t p = now - rychlostPosledniPulzUs;
-      rychlostPeriodaUs = p;
-      rychlostPeriodaBuf[rychlostPeriodaZapisIdx] = p;
-      rychlostPeriodaZapisIdx = (rychlostPeriodaZapisIdx + 1) % RYCHLOST_PERIODA_N;
-      if (rychlostPeriodaPlatnych < RYCHLOST_PERIODA_N) rychlostPeriodaPlatnych++;
-    }
-    rychlostPosledniPulzUs = now;
-
-    rychlostPulzuPocet++;
-    rychlostPosledniUs = now;
+  uint32_t rawDelta = now - rychlostPosledniUs;
+  rychlostPosledniUs = now;
+  if (rawDelta < RYCHLOST_FILTR_US) {
+    rychlostOdmitnutoGlitch++;
+    return;
   }
+
+  // Při pomalé jízdě odmítni izolovaný pulz, který přišel nepřirozeně brzo.
+  if (rychlostPosledniPulzUs != 0) {
+    uint32_t p = now - rychlostPosledniPulzUs;
+    uint32_t reference = rychlostPeriodaUs;
+    bool referencePouzitelna = reference >= RYCHLOST_FILTR_US &&
+                               reference <= RYCHLOST_GLITCH_REF_MAX_US;
+    bool podezreleKratka = referencePouzitelna &&
+      ((uint64_t)p * 100ULL < (uint64_t)reference * RYCHLOST_GLITCH_POMER_PROC);
+    if (podezreleKratka) {
+      rychlostOdmitnutoGlitch++;
+      return;
+    }
+
+    rychlostPeriodaUs = p;
+    rychlostPeriodaBuf[rychlostPeriodaZapisIdx] = p;
+    rychlostPeriodaZapisIdx = (rychlostPeriodaZapisIdx + 1) % RYCHLOST_PERIODA_N;
+    if (rychlostPeriodaPlatnych < RYCHLOST_PERIODA_N) rychlostPeriodaPlatnych++;
+  }
+
+  rychlostPosledniPulzUs = now;
+  rychlostPulzuPocet++;
 }
 
 void IRAM_ATTR rpmIsr() {
