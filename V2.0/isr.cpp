@@ -33,25 +33,15 @@ void IRAM_ATTR fuelPulse() {
 void IRAM_ATTR speedPulse() {
   uint32_t now = micros();
   uint32_t rawDelta = now - rychlostPosledniUs;
-  rychlostPosledniUs = now;
   if (rawDelta < RYCHLOST_FILTR_US) {
     rychlostOdmitnutoGlitch++;
     return;
   }
 
-  // Při pomalé jízdě odmítni izolovaný pulz, který přišel nepřirozeně brzo.
+  // Porovnávání s předchozí periodou zde záměrně není. Při akceleraci se perioda
+  // přirozeně zkracuje a poměrový filtr pak mohl trvale přijímat jen každý druhý pulz.
   if (rychlostPosledniPulzUs != 0) {
     uint32_t p = now - rychlostPosledniPulzUs;
-    uint32_t reference = rychlostPeriodaUs;
-    bool referencePouzitelna = reference >= RYCHLOST_FILTR_US &&
-                               reference <= RYCHLOST_GLITCH_REF_MAX_US;
-    bool podezreleKratka = referencePouzitelna &&
-      ((uint64_t)p * 100ULL < (uint64_t)reference * RYCHLOST_GLITCH_POMER_PROC);
-    if (podezreleKratka) {
-      rychlostOdmitnutoGlitch++;
-      return;
-    }
-
     rychlostPeriodaUs = p;
     rychlostPeriodaBuf[rychlostPeriodaZapisIdx] = p;
     rychlostPeriodaZapisIdx = (rychlostPeriodaZapisIdx + 1) % RYCHLOST_PERIODA_N;
@@ -60,6 +50,9 @@ void IRAM_ATTR speedPulse() {
 
   rychlostPosledniPulzUs = now;
   rychlostPulzuPocet++;
+  // Čas debounce posuň až po přijetí pulzu. Odmítnutý glitch tak nemůže
+  // zablokovat skutečný pulz, který přijde krátce po něm.
+  rychlostPosledniUs = now;
 }
 
 void IRAM_ATTR rpmIsr() {

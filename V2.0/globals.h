@@ -28,8 +28,8 @@
 #endif
 
 constexpr const char* FW_NAME    = "OpenFelicia";
-constexpr const char* FW_VERSION = "V1.4A/E";
-constexpr const char* FW_DATE    = "2026-08-24";
+constexpr const char* FW_VERSION = "V1.4A-HF1";
+constexpr const char* FW_DATE    = "2026-08-25";
 
 // ===== KONFIGURACE RPM =====
 // ===== NEMAZAT JINAK PŘESTANE FUNGOVAT NEVÍM PROČ ALE KDYŽ SE TOHLE ODSTRANÍ PŘESTANE TO KOMPLET FUNGOVAT ========
@@ -91,10 +91,10 @@ constexpr float PALIVO_OFFSET_MAX_L                  = 10.0f;
 //Lehká kalibrace na skutečnou spotřebu – mění se s časem, teplotou, kvalitou paliva atd. – umožňuje nastavit skutečnou spotřebu
 //----------------------------------------------------------------------------------------------------
 constexpr float    VSTRIK_CC_ZA_MIN                  = 155.0f; // Felicia 1.3 AMH vstřikovač 047 906 031 ~125 cc/min @ 2.5–3.0 bar (EV1 hi-Z 18.5Ω) (původně 125c)
-constexpr uint32_t VSTRIK_FILTR_US                   = 800;   // výchozí minimální šířka platného pulzu vstřiku
+constexpr uint32_t VSTRIK_FILTR_US                   = 500;   // ověřená výchozí minimální šířka platného pulzu vstřiku
 constexpr uint32_t VSTRIK_FILTR_MIN_US               = 200;
 constexpr uint32_t VSTRIK_FILTR_MAX_US               = 2000;
-constexpr uint32_t VSTRIK_PULZ_MAX_US                = 30000; // ochrana před chybnou dlouhou hranou
+constexpr uint32_t VSTRIK_PULZ_MAX_US                = 500000; // zachová auto-detekci polarity (20-250 ms)
 constexpr int      MOTOR_POCET_VSTRIKU_DEFAULT       = 4;
 constexpr int      MERENY_POCET_VSTRIKU_DEFAULT      = 1;
 constexpr float    SPOTREBA_KOREKCE_DEFAULT          = 1.0f;
@@ -104,18 +104,13 @@ constexpr float    SPOTREBA_KOREKCE_MAX              = 1.50f;
 
 // ===== KONSTANTY – ČASOVÁNÍ =====
 constexpr unsigned long PALIVO_VZORKOVANI_MS         = 750;  // 750ms = ~5 pulzů při volnoběhu → stabilní průměr
-constexpr float         RYCHLOST_BLEND_KMH           = 30.0f;
+constexpr float         RYCHLOST_BLEND_KMH           = 12.0f;
 constexpr unsigned long RYCHLOST_OKNO_MS             = 250;
 constexpr unsigned long RYCHLOST_OKNO_MAX_MS         = 450;
 constexpr float         RYCHLOST_NIZKA_KMH           = 30.0f;
 constexpr unsigned long RYCHLOST_OKNO_NIZKA_MS       = 750;
 constexpr unsigned long RYCHLOST_OKNO_NIZKA_MAX_MS   = 1100;
 constexpr uint8_t       RYCHLOST_PERIODA_N           = 5;
-constexpr float         RYCHLOST_NIZKA_VSTUP_KMH     = 28.0f;
-constexpr float         RYCHLOST_NIZKA_VYSTUP_KMH    = 34.0f;
-constexpr uint8_t       RYCHLOST_GLITCH_POMER_PROC   = 70;
-constexpr uint32_t      RYCHLOST_GLITCH_REF_MAX_US   = 200000;
-constexpr float         RYCHLOST_KROK_KMH            = 0.5f;
 constexpr unsigned long RYCHLOST_LOG_VYPADEK_MS      = 2500;
 constexpr unsigned long RTC_CACHE_MAX_MS             = 120000UL;
 

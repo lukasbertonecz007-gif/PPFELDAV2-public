@@ -782,6 +782,9 @@ static bool nactiKonfiguraciSD() {
   File f = SD.open(SOUBOR_KONFIGURACE, FILE_READ);
   if (!f) return false;
 
+  int configFileVersion = 1;
+  bool vstrikFiltrNalezen = false;
+
   while (f.available()) {
     String line = f.readStringUntil('\n');
     line.trim();
@@ -790,7 +793,8 @@ static bool nactiKonfiguraciSD() {
     String k, v;
     if (!parsujKv(line, k, v)) continue;
 
-    if (k == "stranka" || k == "page") stranka = v.toInt();
+    if (k == "file_version") configFileVersion = v.toInt();
+    else if (k == "stranka" || k == "page") stranka = v.toInt();
     else if (k == "alarmyPovoleny" || k == "alarmsEnabled") alarmyPovoleny = (v.toInt() != 0);
     else if (k == "upozorneniNizkePalivoPovoleno" || k == "lowFuelWarningEnabled") upozorneniNizkePalivoPovoleno = (v.toInt() != 0);
     else if (k == "teplotaOffsetC") teplotaOffsetC = v.toFloat();
@@ -801,7 +805,7 @@ static bool nactiKonfiguraciSD() {
     else if (k == "gearRpmDolu") gearRpmDolu = v.toFloat();
     else if (k == "PALIVO_NA_US") PALIVO_NA_US = v.toFloat();
     else if (k == "VSTRIK_TOK_CC_MIN") VSTRIK_TOK_CC_MIN = v.toFloat();
-    else if (k == "vstrikFiltrUs") vstrikFiltrUs = (uint32_t)v.toInt();
+    else if (k == "vstrikFiltrUs") { vstrikFiltrUs = (uint32_t)v.toInt(); vstrikFiltrNalezen = true; }
     else if (k == "spotrebaKorekce") spotrebaKorekce = v.toFloat();
     else if (k == "cidloNapajeni") cidloNapajeni = v.toFloat();
     else if (k == "cidloOhmVoda") cidloOhmVoda = v.toFloat();
@@ -830,6 +834,13 @@ static bool nactiKonfiguraciSD() {
   if (isnan(PALIVO_NA_US) || PALIVO_NA_US < 0.0f) PALIVO_NA_US = 0.0f;
   if (isnan(VSTRIK_TOK_CC_MIN) || VSTRIK_TOK_CC_MIN <= 0.0f) VSTRIK_TOK_CC_MIN = VSTRIK_CC_ZA_MIN;
   if (vstrikFiltrUs < VSTRIK_FILTR_MIN_US || vstrikFiltrUs > VSTRIK_FILTR_MAX_US) vstrikFiltrUs = VSTRIK_FILTR_US;
+  // V1.4A/E ukládala vadnou výchozí hodnotu 800 us. Jednorázově ji vrať na
+  // ověřených 500 us; po uložení config v3 lze 800 us znovu nastavit ručně.
+  if (configFileVersion < 3 && (!vstrikFiltrNalezen || vstrikFiltrUs == 800)) {
+    vstrikFiltrUs = VSTRIK_FILTR_US;
+    konfigZmenena = true;
+    konfigZmenenaCas = millis();
+  }
   if (isnan(spotrebaKorekce) || spotrebaKorekce < SPOTREBA_KOREKCE_MIN || spotrebaKorekce > SPOTREBA_KOREKCE_MAX) {
     spotrebaKorekce = SPOTREBA_KOREKCE_DEFAULT;
   }
@@ -860,7 +871,7 @@ static bool ulozKonfiguraciSD() {
   File f = SD.open(SOUBOR_KONFIGURACE_TMP, FILE_WRITE);
   if (!f) return false;
 
-  f.println("file_version=2");
+  f.println("file_version=3");
   zapisKvI(f, "stranka", stranka);
   zapisKvI(f, "alarmyPovoleny", alarmyPovoleny ? 1 : 0);
   zapisKvI(f, "upozorneniNizkePalivoPovoleno", upozorneniNizkePalivoPovoleno ? 1 : 0);

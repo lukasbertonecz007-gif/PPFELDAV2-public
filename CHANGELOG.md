@@ -1,5 +1,23 @@
 # Historie verzi
 
+## OpenFelicia V1.4A-HF1 experimental - 2026-08-25
+
+Hotfix regresi rychlosti a mereni vstrikovani ve verejne V1.4A/E.
+
+### Rychlost
+
+- Odstranen pomerovy ISR filtr, ktery po jednom odmitnutem pulzu mohl trvale prijimat jen kazdy druhy pulz.
+- Odmitnuty glitch uz neposouva cas debounce a nemuze zablokovat nasledujici skutecny pulz.
+- Obnoven overeny vypocet a vyhlazovani rychlosti z V1.3A bez zpetnovazebniho zamknuti pod 34 km/h.
+
+### Vstrikovani
+
+- Obnovena vychozi minimalni sirka pulzu 500 us.
+- Stara vychozi hodnota 800 us se pri prvnim nacteni konfigurace v2 jednorazove migruje na 500 us.
+- Obnoven rozsah do 500 ms, aby automaticka detekce polarity znovu videla pulzy 20-250 ms.
+- Prazdne 750ms okno stahuje spotrebu plynule misto okamziteho skoku na nulu.
+- Zachovan nastavitelny filtr, diagnosticke pocty odmitnutych pulzu i ostatni funkce V1.4.
+
 ## OpenFelicia V1.4A/E experimental - 2026-08-24
 
 Verejna experimentalni sestava vychazejici z interne otestovane V1.4A.

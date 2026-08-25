@@ -2,7 +2,7 @@
 
 Tento dokument odpovida souborum ve slozce `V2.0/`.
 Codename projektu: PPV2.
-Aktualni verejny experimentalni firmware: **OpenFelicia V1.4A/E (2026-08-24)**.
+Aktualni verejny experimentalni firmware: **OpenFelicia V1.4A-HF1 (2026-08-25)**.
 ADS1115 je zde provozovan na **3.3 V**.
 
 ## Licence
@@ -159,5 +159,5 @@ Resetovaci akce vyzaduji druhe potvrzeni.
 - Trojuhelnik vlevo od hodin znamena aktivni servisni upozorneni nebo poruchu.
 - Kriticka varovani trojuhelnik rozblikaji; servisni interval sviti trvale az do resetu.
 - `vstrik.filtr <200..2000>` nastavi minimalni platnou sirku pulzu v mikrosekundach.
-- Vychozi filtr vstriku je 800 us; pulzy nad 30 ms se povazuji za chybnou dlouhou hranu.
+- Vychozi filtr vstriku je 500 us; pulzy do 500 ms se zachovavaji kvuli automaticke detekci polarity.
 - Diagnostika `d` vypisuje pocty odmitnutych pulzu vstriku i rychlosti.
