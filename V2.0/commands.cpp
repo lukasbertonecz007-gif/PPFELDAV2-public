@@ -22,6 +22,61 @@ static bool parsujUint32Presne(const char* text, uint32_t& hodnota) {
   return true;
 }
 
+static bool parsujCrc32Presne(const char* text, uint32_t& hodnota) {
+  if (!text || strlen(text) != 8) return false;
+  for (const char* p = text; *p; ++p) {
+    if (!isxdigit((unsigned char)*p)) return false;
+  }
+  char* konec = nullptr;
+  unsigned long n = strtoul(text, &konec, 16);
+  if (konec == text || *konec != '\0') return false;
+  hodnota = (uint32_t)n;
+  return true;
+}
+
+static void zpracujSdPrikaz(char* buffer, Stream& stream) {
+  char* stav = nullptr;
+  char* prikaz = strtok_r(buffer, " \t", &stav);
+  char* a = strtok_r(nullptr, " \t", &stav);
+  char* b = strtok_r(nullptr, " \t", &stav);
+  char* c = strtok_r(nullptr, " \t", &stav);
+  char* d = strtok_r(nullptr, " \t", &stav);
+  char* navic = strtok_r(nullptr, " \t", &stav);
+
+  if (strcmp(prikaz, "sd.info") == 0 && !a) {
+    sdRemoteInfo(stream);
+  } else if (strcmp(prikaz, "sd.ls") == 0 && !a) {
+    sdRemoteVypisSoubory(stream);
+  } else if (strcmp(prikaz, "sd.get") == 0 && a && !b) {
+    sdRemoteStahni(stream, a);
+  } else if (strcmp(prikaz, "sd.put") == 0 && a && b && c && d && !navic && strcmp(d, "potvrdit") == 0) {
+    uint32_t velikost = 0;
+    uint32_t crc = 0;
+    if (!parsujUint32Presne(b, velikost) || !parsujCrc32Presne(c, crc)) {
+      stream.println("SDFS PUT ERROR INVALID_ARGUMENTS");
+    } else {
+      sdRemoteZahajNahravani(stream, a, velikost, crc);
+    }
+  } else if (strcmp(prikaz, "sd.data") == 0 && a && b && !c) {
+    uint32_t offset = 0;
+    if (!parsujUint32Presne(a, offset)) stream.println("SDFS PUT ERROR INVALID_OFFSET");
+    else sdRemotePrijmiData(stream, offset, b);
+  } else if (strcmp(prikaz, "sd.end") == 0 && !a) {
+    sdRemoteDokonciNahravani(stream);
+  } else if (strcmp(prikaz, "sd.cancel") == 0 && !a) {
+    sdRemoteZrusNahravani(stream);
+  } else if (strcmp(prikaz, "sd.rm") == 0 && a && b && !c && strcmp(b, "potvrdit") == 0) {
+    sdRemoteSmaz(stream, a);
+  } else if (strcmp(prikaz, "sd.reboot") == 0 && a && !b && strcmp(a, "potvrdit") == 0) {
+    stream.println("SDFS REBOOTING");
+    stream.flush();
+    delay(100);
+    ESP.restart();
+  } else {
+    stream.println("SDFS ERROR USAGE sd.info|sd.ls|sd.get|sd.put|sd.data|sd.end|sd.cancel|sd.rm|sd.reboot");
+  }
+}
+
 static void vypisZbyvajiciServis(Stream& stream, const char* nazev, int64_t zbyvaM,
                                  uint64_t intervalM, bool resetNastaven) {
   if (intervalM == 0) {
@@ -52,6 +107,10 @@ static void vypisServis(Stream& stream) {
 }
 
 void zpracujPrikaz(char* buffer, Stream& stream) {
+  if (strncmp(buffer, "sd.", 3) == 0) {
+    zpracujSdPrikaz(buffer, stream);
+    return;
+  }
 
   // --- nuluj: reset statistik ---
   if (jePresnyPrikaz(buffer, "nuluj")) {
@@ -372,6 +431,10 @@ void zpracujPrikaz(char* buffer, Stream& stream) {
     stream.println("civka.v <ohm>       - civka ukazatele teploty");
     stream.println("civka.p <ohm>       - civka ukazatele paliva");
     stream.println("vcc <V>             - napajeni vetve cidel");
+    stream.println("sd.info / sd.ls      - stav a seznam souboru SD");
+    stream.println("sd.get <soubor>      - stahnout pres OpenFeliciaSD.cmd");
+    stream.println("sd.put ... potvrdit  - nahrat config/consumption/service");
+    stream.println("sd.rm <log> potvrdit - smazat jen error/errorbak/system");
     stream.println("?                   - tato napoveda");
   }
 

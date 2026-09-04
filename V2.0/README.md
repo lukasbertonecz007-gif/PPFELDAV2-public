@@ -2,7 +2,7 @@
 
 Tento dokument odpovida souborum ve slozce `V2.0/`.
 Codename projektu: PPV2.
-Aktualni verejny experimentalni firmware: **OpenFelicia V1.4A-HF1 (2026-08-25)**.
+Aktualni firmware: **OpenFelicia V1.5A (2026-09-04)**.
 ADS1115 je zde provozovan na **3.3 V**.
 
 ## Licence
@@ -12,7 +12,7 @@ hobby, servisni a nekomercni pouziti. Komercni pouziti, prodej, placena
 instalace nebo prodej odvozenych zarizeni/PCB/firmwaru neni povolen bez
 predchoziho pisemneho souhlasu autora.
 
-Podrobnosti jsou v korenovem souboru `LICENSE`.
+Podrobnosti jsou v korenovem souboru `LICENSE.md`.
 
 ## 1) Napajeni a zem
 
@@ -41,7 +41,7 @@ Poznamka:
 - ADS `SCL` -> GPIO22
 - ADS `A0` -> signal teploty vody (pres delic R1=15.9k / R2=10k, vetev 8V budiku)
 - ADS `A1` -> signal paliva (pres delic R1=15.9k / R2=10k, vetev 8V budiku)
-- ADS `A2` -> venkovni NTC 10K (MF-52, beta=3950) – vetev **3.3V**, serie 10kΩ primo na ADS (BEZ delice R1/R2!)
+- ADS `A2` -> venkovni NTC 50K (MF-52, beta=3950) – vetev **3.3V**, serie 47kΩ primo na ADS (BEZ delice R1/R2!)
 - ADS `A3` -> volny
 
 Nastaveni v kodu:
@@ -50,13 +50,13 @@ Nastaveni v kodu:
 
 Dulezite:
 - A0 a A1 jsou za napetovym delecem (R1=15.9k, R2=10k) kvuli ochrane pred 8V vetvemi budiku.
-- A2 je primo na 3.3V vetvi (NTC delic: 3.3V -> 10kΩ -> uzel -> NTC -> GND), bez delice.
+- A2 je primo na 3.3V vetvi (NTC delic: 3.3V -> 47kΩ -> uzel -> NTC 50K -> GND), bez delice.
 
 ## 4) SD karta (HSPI)
 
 - `GPIO5`  -> SD CS
 - `GPIO14` -> SD SCK
-- `GPIO12` -> SD MISO
+- `GPIO19` -> SD MISO (DO) – zapojeno mimo bootovací GPIO12, aby SD karta neblokovala upload
 - `GPIO13` -> SD MOSI
 
 ## 5) Digitalni vstupy a preruseni
@@ -112,6 +112,21 @@ nova verze se nahrava pres USB/COM port.
 
 `system.txt` se prepisuje pri bootu a potom priblizne kazdou minutu. Obsahuje firmware,
 uptime, reset reason, stav SD/RTC/ADS, napeti, rychlost, otacky, spotrebu a najezdy.
+
+### Vzdaleny pristup k SD karte
+
+Po USB nebo Bluetooth Classic lze spustit `tools\\OpenFeliciaSD.cmd`. Nastroj umi bezpecne
+stahnout vybrane soubory, nacist jejich kontrolni soucet a nahrat jen `config`,
+`consumption` a `service`. Pri nahrani vytvori PC zalohu puvodniho souboru a firmware
+provede validaci i atomickou vymenu se zalohou na SD.
+
+Mazani neni obecne povolene: nastroj dovoli po rucnim potvrzeni pouze `error`, `errorbak`
+a `system`. Nelze jim smazat ani nahrat libovolnou cestu.
+
+Po uspesnem importu konfigurace, statistik nebo servisu je **nutny restart budiku**.
+Do restartu firmware blokuje automaticke ukladani, aby stary obsah RAM import neprepsal.
+Nastroj zobrazi varovani a nabidne prikaz `sd.reboot potvrdit`; pouzij jej jen kdyz je auto
+zaparkovane. Prenosovy format `SDFS` je urceny pro nastroj, ne pro rucni posilani dat.
 
 ## 9) Kalibrace spotreby
 

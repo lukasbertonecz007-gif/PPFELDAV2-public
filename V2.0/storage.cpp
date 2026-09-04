@@ -1,11 +1,13 @@
 #include <Arduino.h>
 #include "globals.h"
 #include <esp_system.h>
+#include <esp_task_wdt.h>
 
 static bool obnovenaKonfiguraceZeZalohy = false;
 static bool obnovenyStatistikyZeZalohy = false;
 static bool obnovenyServisZeZalohy = false;
 static bool servisSouborPoskozeny = false;
+static bool sdRemoteRestartNutny = false;
 
 // ====== SD karta – helpery a I/O ======
 
@@ -469,6 +471,295 @@ static bool nahradSouborAtomicky(const char* zdrojTmp, const char* cil, const ch
     SD.rename(zaloha, cil);
   }
   return false;
+}
+
+// ====== SD karta – omezeny vzdaleny pristup pres USB/BT ======
+// Protokol pouziva prefix SDFS, aby jej PC nastroj bezpecne oddelil od bezne diagnostiky.
+struct SdRemoteSoubor {
+  const char* alias;
+  const char* cesta;
+  const char* tmp;
+  const char* zaloha;
+  OvereniSouboru overeni;
+  bool lzeNahrat;
+  bool lzeSmazat;
+};
+
+static const SdRemoteSoubor sdRemoteSoubory[] = {
+  { "config",         SOUBOR_KONFIGURACE, SOUBOR_KONFIGURACE_REMOTE_TMP, SOUBOR_KONFIGURACE_BAK, konfiguraceSouborPlatny, true,  false },
+  { "configbak",      SOUBOR_KONFIGURACE_BAK, nullptr, nullptr, konfiguraceSouborPlatny, false, false },
+  { "consumption",    SOUBOR_STATISTIKY, SOUBOR_STATISTIKY_REMOTE_TMP, SOUBOR_STATISTIKY_BAK, statistikySouborPlatny, true,  false },
+  { "consumptionbak", SOUBOR_STATISTIKY_BAK, nullptr, nullptr, statistikySouborPlatny, false, false },
+  { "service",        SOUBOR_SERVIS, SOUBOR_SERVIS_REMOTE_TMP, SOUBOR_SERVIS_BAK, servisSouborPlatny, true,  false },
+  { "servicebak",     SOUBOR_SERVIS_BAK, nullptr, nullptr, servisSouborPlatny, false, false },
+  { "system",         SOUBOR_SYSTEM_STATUS, nullptr, nullptr, nullptr, false, true },
+  { "error",          SOUBOR_ERROR_LOG, nullptr, nullptr, nullptr, false, true },
+  { "errorbak",       SOUBOR_ERROR_LOG_BAK, nullptr, nullptr, nullptr, false, true },
+};
+
+static File sdRemoteUpload;
+static const SdRemoteSoubor* sdRemoteCilNahravani = nullptr;
+static uint32_t sdRemoteOcekavanaVelikost = 0;
+static uint32_t sdRemoteOcekavaneCrc = 0;
+static uint32_t sdRemotePrijato = 0;
+static uint32_t sdRemoteCrc = 0xFFFFFFFFUL;
+
+static const SdRemoteSoubor* najdiSdRemoteSoubor(const char* alias) {
+  if (!alias) return nullptr;
+  for (size_t i = 0; i < sizeof(sdRemoteSoubory) / sizeof(sdRemoteSoubory[0]); ++i) {
+    if (strcmp(alias, sdRemoteSoubory[i].alias) == 0) return &sdRemoteSoubory[i];
+  }
+  return nullptr;
+}
+
+static void zrusSdRemoteNahravaniInterni() {
+  if (sdRemoteUpload) sdRemoteUpload.close();
+  if (sdRemoteCilNahravani && sdRemoteCilNahravani->tmp && SD.exists(sdRemoteCilNahravani->tmp)) {
+    SD.remove(sdRemoteCilNahravani->tmp);
+  }
+  sdRemoteCilNahravani = nullptr;
+  sdRemoteOcekavanaVelikost = 0;
+  sdRemoteOcekavaneCrc = 0;
+  sdRemotePrijato = 0;
+  sdRemoteCrc = 0xFFFFFFFFUL;
+}
+
+static bool sdRemoteCrcSouboru(const char* cesta, uint32_t& velikost, uint32_t& crcOut) {
+  File f = SD.open(cesta, FILE_READ);
+  if (!f) return false;
+  uint32_t crc = 0xFFFFFFFFUL;
+  uint32_t nacteno = 0;
+  uint8_t buffer[64];
+  while (f.available()) {
+    int n = f.read(buffer, sizeof(buffer));
+    if (n <= 0 || nacteno > UINT32_MAX - (uint32_t)n) {
+      f.close();
+      return false;
+    }
+    for (int i = 0; i < n; ++i) crc = crc32Aktualizuj(crc, buffer[i]);
+    nacteno += (uint32_t)n;
+  }
+  f.close();
+  velikost = nacteno;
+  crcOut = ~crc;
+  return true;
+}
+
+static int hexSdRemote(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  return -1;
+}
+
+bool sdRemoteRestartJeNutny() {
+  return sdRemoteRestartNutny;
+}
+
+void sdRemoteInfo(Stream& stream) {
+  if (!sdPripravena) {
+    stream.println("SDFS ERROR SD_NOT_READY");
+    return;
+  }
+  stream.printf("SDFS INFO ready=1 restart=%u card=%d total=%llu used=%llu\n",
+                sdRemoteRestartNutny ? 1U : 0U, (int)SD.cardType(),
+                (unsigned long long)SD.totalBytes(), (unsigned long long)SD.usedBytes());
+}
+
+void sdRemoteVypisSoubory(Stream& stream) {
+  if (!sdPripravena) {
+    stream.println("SDFS ERROR SD_NOT_READY");
+    return;
+  }
+  File root = SD.open("/");
+  if (!root) {
+    stream.println("SDFS ERROR ROOT_OPEN_FAILED");
+    return;
+  }
+  stream.println("SDFS LS BEGIN");
+  while (true) {
+    File f = root.openNextFile();
+    if (!f) break;
+    stream.printf("SDFS LS FILE %s %lu\n", f.name(), (unsigned long)f.size());
+    f.close();
+    delay(0);
+  }
+  root.close();
+  stream.println("SDFS LS END");
+}
+
+void sdRemoteStahni(Stream& stream, const char* alias) {
+  if (!sdPripravena) {
+    stream.println("SDFS ERROR SD_NOT_READY");
+    return;
+  }
+  const SdRemoteSoubor* soubor = najdiSdRemoteSoubor(alias);
+  if (!soubor || !SD.exists(soubor->cesta)) {
+    stream.println("SDFS ERROR FILE_NOT_FOUND");
+    return;
+  }
+  uint32_t velikost = 0;
+  uint32_t crc = 0;
+  if (!sdRemoteCrcSouboru(soubor->cesta, velikost, crc)) {
+    stream.println("SDFS ERROR FILE_READ_FAILED");
+    return;
+  }
+  if (velikost > SD_REMOTE_MAX_READ_BYTES) {
+    stream.printf("SDFS ERROR FILE_TOO_LARGE %lu\n", (unsigned long)velikost);
+    return;
+  }
+  File f = SD.open(soubor->cesta, FILE_READ);
+  if (!f) {
+    stream.println("SDFS ERROR FILE_OPEN_FAILED");
+    return;
+  }
+  stream.printf("SDFS GET BEGIN %s %lu %08lX\n", soubor->alias, (unsigned long)velikost, (unsigned long)crc);
+  // Vetsi ramec zkrati prenos logu; po kazdem ramci explicitne obslouzime WDT.
+  // Pri 115200 Bd muze byt error.log dost dlouhy na to, aby samotne Serial.printf
+  // jinak vyvolalo WDT hlasku a poskodilo SDFS prenos.
+  uint8_t buffer[64];
+  uint32_t offset = 0;
+  while (f.available()) {
+    (void)esp_task_wdt_reset();
+    int n = f.read(buffer, sizeof(buffer));
+    if (n <= 0) {
+      f.close();
+      stream.println("SDFS GET ERROR READ_FAILED");
+      return;
+    }
+    char hex[sizeof(buffer) * 2 + 1];
+    for (int i = 0; i < n; ++i) snprintf(hex + (i * 2), 3, "%02X", buffer[i]);
+    stream.printf("SDFS GET DATA %lu %s\n", (unsigned long)offset, hex);
+    offset += (uint32_t)n;
+    (void)esp_task_wdt_reset();
+    delay(0);
+  }
+  f.close();
+  stream.printf("SDFS GET END %s %08lX\n", soubor->alias, (unsigned long)crc);
+}
+
+void sdRemoteZahajNahravani(Stream& stream, const char* alias, uint32_t velikost, uint32_t crc32) {
+  if (!sdPripravena) {
+    stream.println("SDFS PUT ERROR SD_NOT_READY");
+    return;
+  }
+  const SdRemoteSoubor* soubor = najdiSdRemoteSoubor(alias);
+  if (!soubor || !soubor->lzeNahrat || !soubor->tmp || !soubor->zaloha || !soubor->overeni) {
+    stream.println("SDFS PUT ERROR WRITE_NOT_ALLOWED");
+    return;
+  }
+  if (sdRemoteCilNahravani) {
+    stream.println("SDFS PUT ERROR TRANSFER_ACTIVE");
+    return;
+  }
+  if (velikost == 0 || velikost > SD_REMOTE_MAX_UPLOAD_BYTES) {
+    stream.printf("SDFS PUT ERROR INVALID_SIZE max=%lu\n", (unsigned long)SD_REMOTE_MAX_UPLOAD_BYTES);
+    return;
+  }
+  if (SD.exists(soubor->tmp)) SD.remove(soubor->tmp);
+  sdRemoteUpload = SD.open(soubor->tmp, FILE_WRITE);
+  if (!sdRemoteUpload) {
+    stream.println("SDFS PUT ERROR TEMP_OPEN_FAILED");
+    return;
+  }
+  sdRemoteCilNahravani = soubor;
+  sdRemoteOcekavanaVelikost = velikost;
+  sdRemoteOcekavaneCrc = crc32;
+  sdRemotePrijato = 0;
+  sdRemoteCrc = 0xFFFFFFFFUL;
+  stream.printf("SDFS PUT READY %s %lu\n", soubor->alias, (unsigned long)velikost);
+}
+
+void sdRemotePrijmiData(Stream& stream, uint32_t offset, const char* hexData) {
+  if (!sdRemoteCilNahravani || !sdRemoteUpload) {
+    stream.println("SDFS PUT ERROR NO_TRANSFER");
+    return;
+  }
+  if (!hexData || !hexData[0] || (strlen(hexData) & 1U)) {
+    stream.println("SDFS PUT ERROR INVALID_DATA");
+    zrusSdRemoteNahravaniInterni();
+    return;
+  }
+  size_t pocet = strlen(hexData) / 2U;
+  if (pocet > 16U || offset != sdRemotePrijato || pocet > sdRemoteOcekavanaVelikost ||
+      sdRemotePrijato > sdRemoteOcekavanaVelikost - (uint32_t)pocet) {
+    stream.println("SDFS PUT ERROR BAD_OFFSET_OR_LENGTH");
+    zrusSdRemoteNahravaniInterni();
+    return;
+  }
+  uint8_t data[16];
+  for (size_t i = 0; i < pocet; ++i) {
+    int a = hexSdRemote(hexData[i * 2]);
+    int b = hexSdRemote(hexData[i * 2 + 1]);
+    if (a < 0 || b < 0) {
+      stream.println("SDFS PUT ERROR INVALID_HEX");
+      zrusSdRemoteNahravaniInterni();
+      return;
+    }
+    data[i] = (uint8_t)((a << 4) | b);
+  }
+  if (sdRemoteUpload.write(data, pocet) != pocet) {
+    stream.println("SDFS PUT ERROR WRITE_FAILED");
+    zrusSdRemoteNahravaniInterni();
+    return;
+  }
+  for (size_t i = 0; i < pocet; ++i) sdRemoteCrc = crc32Aktualizuj(sdRemoteCrc, data[i]);
+  sdRemotePrijato += (uint32_t)pocet;
+}
+
+void sdRemoteDokonciNahravani(Stream& stream) {
+  if (!sdRemoteCilNahravani || !sdRemoteUpload) {
+    stream.println("SDFS PUT ERROR NO_TRANSFER");
+    return;
+  }
+  sdRemoteUpload.flush();
+  sdRemoteUpload.close();
+  const SdRemoteSoubor* soubor = sdRemoteCilNahravani;
+  bool prenosOk = sdRemotePrijato == sdRemoteOcekavanaVelikost && (~sdRemoteCrc) == sdRemoteOcekavaneCrc;
+  if (!prenosOk) {
+    stream.println("SDFS PUT ERROR TRANSFER_CRC_OR_SIZE");
+    zrusSdRemoteNahravaniInterni();
+    return;
+  }
+  if (!pridejCrcSouboru(soubor->tmp)) {
+    stream.println("SDFS PUT ERROR INTERNAL_CRC_FAILED");
+    zrusSdRemoteNahravaniInterni();
+    return;
+  }
+  bool ulozeno = nahradSouborAtomicky(soubor->tmp, soubor->cesta, soubor->zaloha, soubor->overeni);
+  zrusSdRemoteNahravaniInterni();
+  if (!ulozeno) {
+    stream.println("SDFS PUT ERROR VALIDATION_OR_REPLACE_FAILED");
+    return;
+  }
+  sdRemoteRestartNutny = true;
+  stream.printf("SDFS PUT OK %s RESTART_REQUIRED\n", soubor->alias);
+}
+
+void sdRemoteZrusNahravani(Stream& stream) {
+  if (!sdRemoteCilNahravani) {
+    stream.println("SDFS PUT IDLE");
+    return;
+  }
+  zrusSdRemoteNahravaniInterni();
+  stream.println("SDFS PUT CANCELLED");
+}
+
+void sdRemoteSmaz(Stream& stream, const char* alias) {
+  if (!sdPripravena) {
+    stream.println("SDFS RM ERROR SD_NOT_READY");
+    return;
+  }
+  const SdRemoteSoubor* soubor = najdiSdRemoteSoubor(alias);
+  if (!soubor || !soubor->lzeSmazat) {
+    stream.println("SDFS RM ERROR DELETE_NOT_ALLOWED");
+    return;
+  }
+  if (!SD.exists(soubor->cesta)) {
+    stream.println("SDFS RM OK NOT_PRESENT");
+    return;
+  }
+  stream.println(SD.remove(soubor->cesta) ? "SDFS RM OK" : "SDFS RM ERROR REMOVE_FAILED");
 }
 
 static bool nactiServisSD() {
@@ -946,6 +1237,9 @@ bool inicializujSD() {
   if (SD.exists(SOUBOR_KONFIGURACE_TMP)) SD.remove(SOUBOR_KONFIGURACE_TMP);
   if (SD.exists(SOUBOR_STATISTIKY_TMP)) SD.remove(SOUBOR_STATISTIKY_TMP);
   if (SD.exists(SOUBOR_SERVIS_TMP)) SD.remove(SOUBOR_SERVIS_TMP);
+  if (SD.exists(SOUBOR_KONFIGURACE_REMOTE_TMP)) SD.remove(SOUBOR_KONFIGURACE_REMOTE_TMP);
+  if (SD.exists(SOUBOR_STATISTIKY_REMOTE_TMP)) SD.remove(SOUBOR_STATISTIKY_REMOTE_TMP);
+  if (SD.exists(SOUBOR_SERVIS_REMOTE_TMP)) SD.remove(SOUBOR_SERVIS_REMOTE_TMP);
 
   bool konfigMaCrc = false;
   bool statistikyMajiCrc = false;
@@ -974,7 +1268,7 @@ bool inicializujSD() {
 }
 
 void moznaUlozSD() {
-  if (!sdPripravena) return;
+  if (!sdPripravena || sdRemoteRestartNutny) return;
   unsigned long now = millis();
   bool timeUp = (now - posledniUlozeniMs) >= ULOZ_INTERVAL_MS;
   uint64_t distDelta = (celkoveMetry_u64 >= posledniUlozeneMetry_u64) ? (celkoveMetry_u64 - posledniUlozeneMetry_u64) : 0;
@@ -1000,7 +1294,7 @@ bool ulozKonfiguraciSdNyni() {
 }
 
 void moznaUlozKonfiguraciSD() {
-  if (!sdPripravena || !konfigZmenena) return;
+  if (!sdPripravena || !konfigZmenena || sdRemoteRestartNutny) return;
   if ((millis() - konfigZmenenaCas) < KONFIG_ULOZ_ZPOZDENI_MS) return;
 
   if (ulozKonfiguraciSD()) {

@@ -28,8 +28,8 @@
 #endif
 
 constexpr const char* FW_NAME    = "OpenFelicia";
-constexpr const char* FW_VERSION = "V1.4A-HF1";
-constexpr const char* FW_DATE    = "2026-08-25";
+constexpr const char* FW_VERSION = "V1.5A";
+constexpr const char* FW_DATE    = "2026-09-04";
 
 // ===== KONFIGURACE RPM =====
 // ===== NEMAZAT JINAK PŘESTANE FUNGOVAT NEVÍM PROČ ALE KDYŽ SE TOHLE ODSTRANÍ PŘESTANE TO KOMPLET FUNGOVAT ========
@@ -184,9 +184,10 @@ constexpr unsigned long SPUSTENI_MAX_MS             = 3000;
 constexpr unsigned long NIZKE_PALIVO_UPOZORNENI_MS  = 7500;
 
 // ===== KONSTANTY – VENKOVNÍ TEPLOTA =====
-constexpr float VENKU_SERIOVY_OHM     = 10000.0f;
-constexpr float VENKU_R0              = 10000.0f;
-constexpr float VENKU_BETA            = 3950.0f;  // MF-52 10K NTC (B25/85)
+// MF52 50K NTC (B=3950), zapojený s externím sériovým rezistorem 47 kΩ.
+constexpr float VENKU_SERIOVY_OHM     = 47000.0f;
+constexpr float VENKU_R0              = 50000.0f;
+constexpr float VENKU_BETA            = 3950.0f;
 constexpr float T0_KELVIN             = 298.15f;
 
 // ===== KONSTANTY – RYCHLOST / RPM =====
@@ -222,13 +223,16 @@ constexpr unsigned long DOJEZD_AKTUALIZACE_MS     = 20000UL;
 // ===== KONSTANTY – SD KARTA =====
 constexpr int SD_CS   = 5;
 constexpr int SD_SCK  = 14;
-constexpr int SD_MISO = 12;
+// GPIO19 není bootovací pin; SD karta tak neblokuje bootloader při uploadu.
+constexpr int SD_MISO = 19;
 constexpr int SD_MOSI = 13;
 
 constexpr unsigned long ULOZ_INTERVAL_MS   = 10000;
 constexpr uint32_t      ULOZ_KAZDE_M       = 200;
 constexpr unsigned long KONFIG_ULOZ_ZPOZDENI_MS = 1500;
 constexpr uint32_t      ERROR_LOG_MAX_BYTES = 65536UL;
+constexpr uint32_t      SD_REMOTE_MAX_READ_BYTES = 65536UL;
+constexpr uint32_t      SD_REMOTE_MAX_UPLOAD_BYTES = 16384UL;
 
 #define SOUBOR_STATISTIKY       "/consumption.txt"
 #define SOUBOR_STATISTIKY_TMP   "/consumption.tmp"
@@ -242,6 +246,9 @@ constexpr uint32_t      ERROR_LOG_MAX_BYTES = 65536UL;
 #define SOUBOR_SERVIS           "/service.txt"
 #define SOUBOR_SERVIS_TMP       "/service.tmp"
 #define SOUBOR_SERVIS_BAK       "/service.bak"
+#define SOUBOR_STATISTIKY_REMOTE_TMP "/consumption.remote.tmp"
+#define SOUBOR_KONFIGURACE_REMOTE_TMP "/config.remote.tmp"
+#define SOUBOR_SERVIS_REMOTE_TMP      "/service.remote.tmp"
 
 // ===== VAROVÁNÍ =====
 enum VarovaniBit : uint16_t {
@@ -488,6 +495,15 @@ void zapisErrorLog(const char* uroven, const char* kod, const char* detail = nul
 void zalogujStartSystemu();
 void obsluzSystemovyLog();
 void ulozSystemStatus(const char* duvod = nullptr);
+void sdRemoteInfo(Stream& stream);
+void sdRemoteVypisSoubory(Stream& stream);
+void sdRemoteStahni(Stream& stream, const char* alias);
+void sdRemoteZahajNahravani(Stream& stream, const char* alias, uint32_t velikost, uint32_t crc32);
+void sdRemotePrijmiData(Stream& stream, uint32_t offset, const char* hexData);
+void sdRemoteDokonciNahravani(Stream& stream);
+void sdRemoteZrusNahravani(Stream& stream);
+void sdRemoteSmaz(Stream& stream, const char* alias);
+bool sdRemoteRestartJeNutny();
 
 // commands.cpp
 void zpracujPrikaz(char* buffer, Stream& stream);

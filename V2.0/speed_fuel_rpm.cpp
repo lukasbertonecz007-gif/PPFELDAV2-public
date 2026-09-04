@@ -183,26 +183,25 @@ void vypocetPalivoRychlost() {
       if (newFuelRate > 40.0f) newFuelRate = 40.0f;  // pojistka proti úletům
     }
 
-    // --- rychlý filtr pro okamžitou spotřebu (L/h) ---
-    const float ALPHA_INST = 0.45f;
     diagPalivoSyreLh = newFuelRate;
-    palivoTokInst = ALPHA_INST * newFuelRate + (1.0f - ALPHA_INST) * palivoTokInst;
-    if (palivoTokInst < 0.0f) palivoTokInst = 0.0f;
 
-    // --- adaptivní filtr pro pomalou L/h ---
-    float alphaFuel;
-    if (palivoOknoUs == 0) {
-      // Krátký výpadek platných pulzů stáhni plynule, ne skokem na nulu.
-      alphaFuel = 0.40f;
-      newFuelRate = 0.0f;
-    } else if (rychlostVozu < 3.0f) {
-      alphaFuel = 0.02f;
+    // Celé 750ms okno bez platného pulzu znamená vypnutý vstřik (např. brzdění motorem).
+    // Vynuluj obě zobrazované hodnoty hned, aby nezůstával dojezd 0.1 L/h z filtru.
+    const bool bezVstriku = (palivoOknoPulzu == 0 || palivoOknoUs == 0);
+    if (bezVstriku) {
+      palivoTokInst = 0.0f;
+      spotrebaLh = 0.0f;
     } else {
-      alphaFuel = 0.15f;
-    }
+      // --- rychlý filtr pro okamžitou spotřebu (L/h) ---
+      const float ALPHA_INST = 0.45f;
+      palivoTokInst = ALPHA_INST * newFuelRate + (1.0f - ALPHA_INST) * palivoTokInst;
+      if (palivoTokInst < 0.0f) palivoTokInst = 0.0f;
 
-    spotrebaLh = alphaFuel * newFuelRate + (1.0f - alphaFuel) * spotrebaLh;
-    if (spotrebaLh < 0.0f) spotrebaLh = 0.0f;
+      // --- adaptivní filtr pro pomalou L/h ---
+      const float alphaFuel = (rychlostVozu < 3.0f) ? 0.02f : 0.15f;
+      spotrebaLh = alphaFuel * newFuelRate + (1.0f - alphaFuel) * spotrebaLh;
+      if (spotrebaLh < 0.0f) spotrebaLh = 0.0f;
+    }
 
     // Integrovat celkovou spotřebu. u64 je hlavní zdroj pravdy, float jen kopie pro UI.
     static double palivoUlNevyreseno = 0.0;

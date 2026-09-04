@@ -4,12 +4,12 @@ Veřejna verze palubního počítace pro škoda Felicia 1.3 MPI.
 
 Zdrojový kod je ve složce `V2.0/`. Projekt je připravený pro PlatformIO.
 
-Aktualni verejna testovaci verze: **OpenFelicia V1.4A-HF1 experimental**
-z 25. 8. 2026.
+Aktualni verejna testovaci verze: **OpenFelicia V1.5A**
+z 4. 9. 2026.
 
 Codename: PPV2.
 
-Zmeny od V1.2E a upozorneni k aktualizaci jsou popsane v `CHANGELOG.md`.
+Zmeny a upozorneni k aktualizaci jsou popsane v `CHANGELOG.md`.
 
 ## License
 

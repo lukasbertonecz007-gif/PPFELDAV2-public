@@ -1,5 +1,23 @@
 # Historie verzi
 
+## OpenFelicia V1.5A - 2026-09-04
+
+Verejna sestava odpovidajici aktualni soukrome testovane verzi.
+
+### Spotreba, cidla a SD
+
+- Opravene okamzite vynulovani spotreby pri okne bez platneho pulzu vstriku.
+- Vychozi filtr vstriku 500 us a migrace stare vychozi hodnoty 800 us.
+- Venkovni cidlo MF52 je nastaveno pro NTC 50K B3950 se seriovym odporem 47k.
+- SD MISO je na GPIO19, aby SD karta neblokovala bootloader pri nahravani firmware.
+- Pres USB nebo Bluetooth lze nastrojem `tools\\OpenFeliciaSD.cmd` bezpecne stahovat SD soubory a importovat pouze config, consumption nebo service; import vyzaduje restart budiku.
+- Prenos delsiho `error.log` pravidelne obsluhuje watchdog, aby se prenos neposkodil resetem.
+
+### Aktualizace
+
+- Kompilujte pomoci `pio run`; nahrani do budiku provadejte jen pres potvrzeny COM port.
+- Zmena verze sama o sobe nemeni data na SD karte.
+
 ## OpenFelicia V1.4A-HF1 experimental - 2026-08-25
 
 Hotfix regresi rychlosti a mereni vstrikovani ve verejne V1.4A/E.
